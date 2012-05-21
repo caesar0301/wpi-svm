@@ -94,21 +94,33 @@ class Feature(object):
 			'number_of_objects',
 			'object_size_median',
 			'object_size_average',
+			'downloading_time_of_object_median',
+			'downloading_time_of_object_average',
 			'number_of_javascript_objects',
 			'size_of_javascript_objects_median',
 			'size_of_javascript_objects_average',
+			'downloading_time_of_javascript_median',
+			'downloading_time_of_javascript_average',
 			'number_of_image_objects',
 			'size_of_image_objects_median',
 			'size_of_image_objects_average',
+			'downloading_time_of_image_median',
+			'downloading_time_of_image_average',
 			'number_of_flash_objects',
 			'size_of_flash_objects_median',
 			'size_of_flash_objects_average',
+			'downloading_time_of_flash_median',
+			'downloading_time_of_flash_average',
 			'number_of_css_objects',
 			'size_of_css_objects_median',
 			'size_of_css_objects_average',
+			'downloading_time_of_css_median',
+			'downloading_time_of_css_average',
 			'number_of_unidentified_objects',
 			'size_of_unidentified_objects_median',
 			'size_of_unidentified_objects_average',
+			'downloading_time_of_unidentified_median',
+			'downloading_time_of_unidentified_average',
 		]
 		instance = str(label)
 		for att in attributes:
@@ -135,7 +147,7 @@ class Feature(object):
 		self.f_dict['size_of_all_objects'] = tot_size
 		self.f_dict['downloading_time_of_all_objects'] = 0
 		html_candidate = self.owner.root
-		self.f_dict['size_of_html_candidate'] = 0
+		self.f_dict['size_of_html_candidate'] = html_candidate.size
 		self.f_dict['url_level_of_html_candidate'] = 0
 		self.f_dict['downloading_time_of_html_candidate'] = html_candidate.receiving_time
 
@@ -170,35 +182,47 @@ class Feature(object):
 			subtype = which_type(obj)
 			type_obj_dict[subtype].append(obj)
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(all_objects)
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(all_objects)
 		self.f_dict['number_of_objects'] = number
 		self.f_dict['object_size_median'] = median_size
 		self.f_dict['object_size_average'] = average_size
+		self.f_dict['downloading_time_of_object_median'] = median_time
+		self.f_dict['downloading_time_of_object_average'] = average_time
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(type_obj_dict['others'])
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(type_obj_dict['others'])
 		self.f_dict['number_of_unidentified_objects'] = number
 		self.f_dict['size_of_unidentified_objects_median'] = median_size
 		self.f_dict['size_of_unidentified_objects_average'] = average_size
+		self.f_dict['downloading_time_of_unidentified_median'] = median_time
+		self.f_dict['downloading_time_of_unidentified_average'] = average_time
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(type_obj_dict['image'])
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(type_obj_dict['image'])
 		self.f_dict['number_of_image_objects'] = number
 		self.f_dict['size_of_image_objects_median'] = median_size
 		self.f_dict['size_of_image_objects_average'] = average_size
+		self.f_dict['downloading_time_of_image_median'] = median_time
+		self.f_dict['downloading_time_of_image_average'] = average_time
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(type_obj_dict['flash'])
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(type_obj_dict['flash'])
 		self.f_dict['number_of_flash_objects'] = number
 		self.f_dict['size_of_flash_objects_median'] = median_size
 		self.f_dict['size_of_flash_objects_average'] = average_size
+		self.f_dict['downloading_time_of_flash_median'] = median_time
+		self.f_dict['downloading_time_of_flash_average'] = average_time
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(type_obj_dict['css'])
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(type_obj_dict['css'])
 		self.f_dict['number_of_css_objects'] = number
 		self.f_dict['size_of_css_objects_median'] = median_size
 		self.f_dict['size_of_css_objects_average'] = average_size
+		self.f_dict['downloading_time_of_css_median'] = median_time
+		self.f_dict['downloading_time_of_css_average'] = average_time
 
-		(number, median_size, average_size) = self.__pro_subtype_objects(type_obj_dict['js'])
+		(number, median_size, average_size, median_time, average_time) = self.__pro_subtype_objects(type_obj_dict['js'])
 		self.f_dict['number_of_javascript_objects'] = number
 		self.f_dict['size_of_javascript_objects_median'] = median_size
 		self.f_dict['size_of_javascript_objects_average'] = average_size
+		self.f_dict['downloading_time_of_javascript_median'] = median_time
+		self.f_dict['downloading_time_of_javascript_average'] = average_time
 
 	def __pro_subtype_objects(self, obj_list):
 		""" Processing objects of subtype.
@@ -217,16 +241,22 @@ class Feature(object):
 		def average(numbers):
 			return math.fsum(numbers)/len(numbers)
 
-		numbers = [i.size for i in obj_list if i.size != -1]
-		if len(numbers) == 0:
-			count = 0
-			med = 0
-			ave = 0
+		count = len(obj_list)
+		sizes = [i.size for i in obj_list if i.size != -1]
+		timings = [i.receiving_time for i in obj_list if i.receiving_time != -1]
+		if len(sizes) == 0:
+			med_size = 0
+			ave_size = 0
 		else:
-			count = len(numbers)
-			med = median(numbers)
-			ave = average(numbers)
-		return (count, med, ave)
+			med_size = median(sizes)
+			ave_size = average(sizes)
+		if len(timings) ==0:
+			med_time = 0
+			ave_time = 0
+		else:
+			med_time = median(timings)
+			ave_time = average(timings)
+		return (count, med_size, ave_size, med_time, ave_time)
 
 def process_har_file(input, output):
 	""" Processing HAR file

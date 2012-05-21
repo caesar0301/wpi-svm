@@ -1,12 +1,3 @@
-pr-svm
-======
-
-To reconstruct web page from network traffic using support vector machine.
-
-++All features:
-number_of_servers_contacted
-number_of_origins_contacted
-fraction_of_nonorigin_servers_contacted
 size_of_all_objects
 downloading_time_of_all_objects
 size_of_html_candidate
