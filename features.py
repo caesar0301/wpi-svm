@@ -113,6 +113,9 @@ class Feature(object):
 		instance = str(label)
 		for att in attributes:
 			instance += ' %d:%d' % (attributes.index(att)+1, self.f_dict[att])
+		features_f = open('features.txt', 'wb')
+		features_f.write('\n'.join(attributes))
+		features_f.close()
 		return instance
 
 	def __server_info(self):
