@@ -2,114 +2,145 @@
 # This program extracts features as the input of LIBSVM from HAR file 
 # Author: chenxm
 
-import json, re, math, argparse, os
-from myweb import WebObject as WO
-from myweb import WebPage as PageCand
-from myweb import PageFeature as Feature
+import json, re, math, argparse, os, uuid
+from myweb import WebObject
+from myweb import WebPage
+from myweb import PageFeature
 
-class WebObject(WO):
+def parse_field(dict, key):
+	""" Simple dict wrapper
+	dict: name of dict object
+	key: name of key
+	Return: dict[key] or None
+	"""
+	try:
+		value = dict[key]
+	except KeyError:
+		value = None
+	return value
+
+class MyObject(WebObject):
 	""" Defining the class for web objects extracted from HAR file.
 	"""
 	def __init__(self, har_ent):
 		""" har_ent: web entry of HAR file
 		"""
-		WO.__init__(self)
+		WebObject.__init__(self)
+		self.pageid = har_ent['pageref']
 		self.start_time = None
-		self.total_time = har_ent['time']
-		self.receiving_time = har_ent['timings']['receive']
-		request = har_ent['request']
-		response = har_ent['response']
-		self.url = request['url']
-		self.status = response['status']
-		self.size = response['bodySize']
-		self.type = response['content']['mimeType']
-		self.referrer = None
-		for field in request['headers']:
-			if field['name'] == 'Referer':
-				self.referrer = field['value']
-		self.re_url = None
-		for field in response['headers']:
-			if field['name'] == 'Location':
-				self.re_url = field['value']
+		self.total_time = parse_field(har_ent, 'time')
+		timings = parse_field(har_ent, 'timings')
+		if timings is not None:
+			self.receiving_time = parse_field(timings, 'receive')
+		request = parse_field(har_ent, 'request')
+		response = parse_field(har_ent, 'response')
+		if request is not None:
+			self.url = parse_field(request, 'url')
+			headers = parse_field(request, 'headers')
+			if headers is not None:
+				for field in headers:
+					if field['name'] == 'Referer':
+						self.referrer = field['value']
+		if response is not None:
+			self.status = parse_field(response, 'status')
+			self.size = parse_field(response, 'bodySize')
+			content = parse_field(response, 'content')
+			if content is not None:
+				self.type = parse_field(content, 'mimeType')
+			headers = parse_field(response, 'headers')
+			for field in headers:
+				if field['name'] == 'Location':
+					self.re_url = field['value']
 				
-def process_har_file(input, output):
+class MyPage(WebPage):
+	"""
+	"""
+	def __init__(self, id = None):
+		WebPage.__init__(self)
+		if id is None:
+			id = uuid.uuid4().hex
+		self.id = id
+				
+def process_har_file(input):
 	""" Processing HAR file
 	input: the relative or absolute filename of HAR file
-	output: the output filename including instances as input of LIBSVM
+	Return: list of real pages identified by pageref in HAR file
+		&&	list of page candidates
 	"""
+	print input
 	# Open HAR file
 	ifile = open(input, 'rb')
 	uni_str = unicode(ifile.read(), 'utf-8', 'replace')
 	har_log = json.loads(uni_str)['log']
 	web_pages = har_log['pages']
-	print 'web pages# ', len(web_pages)
 	web_objects = har_log['entries']
-	print 'web objects# ', len(web_objects)
-
+	# find real pages which are recorded in HAR file.
+	real_pages = []
+	for item in web_pages:
+		new_page = MyPage(item['id'])
+		real_pages.append(new_page)
+	for item in web_objects:
+		wo = MyObject(item)
+		found_page = None
+		for i in real_pages:
+			if i.id == wo.pageid:
+				found_page = i
+				break
+		if found_page:
+			found_page.add_obj(wo)	# all objects are added
+			if wo.status == 200 and wo.is_root():
+				if found_page.root is None:
+					found_page.root = wo
+		else:
+			print 'HAR error: entry ref error.'
+			assert(0)		
+	# find page candidates
 	page_cands = []
 	junk_html_objs = []
 	junk_nonhtml_objs = []
-	for obj in web_objects:
-		wo = WebObject(obj)
+	all_objs = []
+	for page in real_pages:
+		all_objs += page.objs
+	for wo in all_objs:
 		if wo.is_root():
-			if wo.status in [200]:	#?? 301, 302
-				new_page_c = PageCand(wo)
+			if wo.status == 200:
+				new_page_c = MyPage()
+				new_page_c.root = wo
+				new_page_c.add_obj(wo)
 				page_cands.append(new_page_c)
 			else:
 				junk_html_objs.append(wo)
 		else:
 			found = False
 			for pc in page_cands:
-				if pc.own_this(wo):
+				if pc.own_this(wo, 'loose'):
 					pc.add_obj(wo)
 					found = True
 					break
 			if found is False:
 				junk_nonhtml_objs.append(wo)
-
-	# for pc in page_cands:
-	# 	print pc.root.url
-	# 	#print pc.root.status
-	# 	print len(pc.objs)
-	# print 'junks html:', len(junk_html_objs)
-	# for i in junk_html_objs:
-	# 	print i.status, i.referrer, i.re_url
-	# print 'junks nonhtml:', len(junk_nonhtml_objs)
-	# for i in junk_nonhtml_objs:
-	# 	print i.url
-	# 	print i.referrer
-	
-	all_instances = []
-	for pc in page_cands:
-		if page_cands.index(pc) == 0:
-			label = 1
-		else:
-			label = 0
-		pf = Feature(pc)
-		instance = pf.assemble_instance(label)
-		print instance
-		all_instances.append(instance)
-	ofile = open(output, 'wb')
-	ofile.write('\n'.join(all_instances))
-	ofile.close()
+	print len(web_objects), len(junk_nonhtml_objs)
+	return real_pages, page_cands
 
 def main():
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from HAR file')
 	parser.add_argument('-f', '--input', type=str, help= 'a single HAR file as input')
 	parser.add_argument('-b', '--batch', type=str, help= 'file folder containing HAR file(s). \
 						All the HAR files under this folder will be processed.')
-	parser.add_argument('-o', '--output', type=str, default = 'hardata', help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
 	input_file = args.input
 	input_folder = args.batch
-	output_file = args.output
 	if input_file is None and input_folder is None:
 		parser.print_help()
 		exit(1)
 	else:
+		all_real_pages = []
+		all_page_cands = []
 		if input_file is not None:
-			process_har_file(input_file, output_file)
+			(rps, pcs) = process_har_file(input_file)
+			all_real_pages += rps
+			all_page_cands += pcs
 		elif input_folder is not None:
 			# Processing all HAR file under the folder
 			for root, dirs, files in os.walk(input_folder):
@@ -117,7 +148,28 @@ def main():
 					suffix = file.rsplit('.', 1)[1]
 					if suffix != 'har':
 						continue
-					process_har_file(os.path.join(root, file), output_file)
+					(rps, pcs) = process_har_file(os.path.join(root, file))
+					all_real_pages += rps
+					all_page_cands += pcs
+		# dump LIBSVM instances
+		all_instances = []
+		all_real_roots = [i.root for i in all_real_pages if i.root != None]
+		for pc in all_page_cands:
+			if pc.root in all_real_roots:
+				label = 1
+			else:
+				label = 0
+			pf = PageFeature(pc)
+			instance = pf.assemble_instance(label)
+			all_instances.append(instance)
+		ofile = open('har.f', 'wb')
+		ofile.write('\n'.join(all_instances))
+		ofile.close()
+		# dump urls
+		all_real_urls = [i.url for i in all_real_roots]
+		ofile = open('urls', 'wb')
+		ofile.write('\n'.join(all_real_urls))
+		ofile.close()
 
 
 if __name__ == '__main__':

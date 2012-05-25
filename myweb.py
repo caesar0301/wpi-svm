@@ -35,20 +35,30 @@ class WebObject(object):
 class WebPage(object):
 	""" Page candidate insists of a HTML file as root and following referring non-HTML objects.
 	"""
-	def __init__(self, root_obj):
+	def __init__(self):
 		""" root_obj: a HTML object of :WebObject
 		"""
-		self.root = root_obj
-		self.urls = [root_obj.url]
-		self.objs = [root_obj]
+		self.root = None
+		self.urls = []
+		self.objs = []
 
-	def own_this(self, obj):
+	def own_this(self, obj, rule = 'strict'):
 		""" Checking if the obj belongs to this page.
 		obj: an object of :WebObject
 		"""
-		for url in self.urls:
-			if obj.referrer == url:
-				return True
+		if rule == 'strict':
+			for url in self.urls:
+				if obj.referrer and  obj.referrer == url:
+					return True
+		elif rule == 'loose':	
+			for url in self.urls:
+				pure_url = re.compile(r'^\w+://([^#\?]+)#?\??')
+				if obj.referrer and url:
+					match_ref = pure_url.match(obj.referrer)
+					match_url = pure_url.match(url)
+					if match_ref and match_url:
+						if match_ref.group(1) == match_url.group(1):
+							return True
 		return False
 
 	def add_obj(self, obj):
@@ -57,8 +67,6 @@ class WebPage(object):
 		"""
 		self.urls.append(obj.url)
 		self.objs.append(obj)
-		
-		
 		
 class PageFeature(object):
 	""" Extracting features of web page.

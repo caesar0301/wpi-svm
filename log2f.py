@@ -19,7 +19,7 @@ def read_log(log_file):
 		uni_line = unicode(line, 'utf-8', 'replace')
 		flow = json.loads(uni_line)
 		flows.append(flow)
-	flows.sort(lambda x,y: cmp(x['time_syn'], y['time_syn']), None, False)
+	flows.sort(lambda x,y: cmp(x['synt'], y['synt']), None, False)
 	return flows
 			
 def parse_field(dict, key):
@@ -63,18 +63,18 @@ def process_flow(flow):
 	Return: list of web objects
 	"""	
 	wo_list = []	# Web objects will be returned
-	source_ip = flow['saddr']
-	http_pairs = flow['http_pairs']
+	source_ip = flow['sa']
+	http_pairs = flow['pairs']
 	for http_pair in http_pairs:
 		new_wo = WebObject()
-		request = parse_field(http_pair, 'request')
-		response = parse_field(http_pair, 'response')
+		request = parse_field(http_pair, 'req')
+		response = parse_field(http_pair, 'res')
 		if request is not None:
-			req_fbt = parse_field(request, 'time_first_byte')
+			req_fbt = parse_field(request, 'fbt')
 			host = parse_field(request, 'host')
 			uri = parse_field(request, 'uri')
-			user_agent = parse_field(request, 'user_agent')
-			referrer = parse_field(request, 'referer')
+			user_agent = parse_field(request, 'ua')
+			referrer = parse_field(request, 'ref')
 		else:
 			req_fbt = None
 			host = None
@@ -82,12 +82,12 @@ def process_flow(flow):
 			user_agent = None
 			referrer = None
 		if response is not None:
-			rsp_status = parse_field(response, 'status')
-			rsp_fbt = parse_field(response, 'time_first_byte')
-			rsp_lbt = parse_field(response, 'time_last_byte')
-			content_length = parse_field(response, 'content_length')
-			mime_type = parse_field(response, 'content_type')
-			re_location = parse_field(response, 'location')
+			rsp_status = parse_field(response, 'sta')
+			rsp_fbt = parse_field(response, 'fbt')
+			rsp_lbt = parse_field(response, 'lbt')
+			content_length = parse_field(response, 'conlen')
+			mime_type = parse_field(response, 'contyp')
+			re_location = parse_field(response, 'loc')
 		else:
 			rsp_status = None
 			rsp_fbt = None
@@ -120,7 +120,9 @@ def process_web_object(res, wo):
 	"""
 	if wo.type and wo.is_root():
 		if wo.status in [200]:
-			new_page = WebPage(wo)
+			new_page = WebPage()
+			new_page.root = wo
+			new_page.add_obj(wo)
 			if wo.user_ip in res:
 				ua_pages_dict = res[wo.user_ip]
 				if wo.user_agent in ua_pages_dict:
@@ -143,47 +145,48 @@ def process_log(logfile, gt_urls, outfile):
 	gt_urls: name of file storing valid urls to deduce the labels of instances
 	outfile: name of output file
 	"""
+	valid_urls = open(gt_urls, 'rb').read().split('\n')
 	flows = read_log(logfile)
 	all_wos = []
 	for flow in flows:
 		wos = process_flow(flow)
 		all_wos += wos
-	all_wos.sort(lambda x,y: cmp(x, y), lambda x: x.start_time, False)	
+	all_wos.sort(lambda x,y: cmp(x, y), lambda x: x.start_time, False)
 	ip_data_d = {}
 	for wo in all_wos:
 		process_web_object(ip_data_d, wo)
-	valid_urls = open(gt_urls, 'rb').read().split('\n')
 	
 	def gen_label(urls, url):
-		if url in urls:
-			return 1
-		else:
-			return 0
+		for i in urls:
+			if remove_url_prefix(url) == remove_url_prefix(i):
+				return 1
+		return 0
 	
 	all_instances = []
+	cnt = 0
 	for ua_data_d in ip_data_d.values():
 		for page_arr in ua_data_d.values():
 			for page in page_arr:
 				pf = PageFeature(page)
 				label = gen_label(valid_urls, page.root.url)
+				if label == 1:
+					cnt += 1
 				instance = pf.assemble_instance(label)
-				print instance
 				all_instances.append(instance)
 	ofile = open(outfile, 'ab')
 	ofile.write('\n'.join(all_instances))
 	ofile.close()
-							
+	print cnt
+	
 def main():
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log of web-logger')
 	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
 						git@github.com:caesar0301/web-logger.git')
 	parser.add_argument('gtfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = 'logdata', help= 'output file containing LIBSVM instances')
+	parser.add_argument('-o', '--output', type=str, default = 'log.f', help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
-	print "I'm working hard..."
 	process_log(args.logfile, args.gtfile, args.output)
-	print "Done!"
 
 if __name__ == "__main__":
 	main()
