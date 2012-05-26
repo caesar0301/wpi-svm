@@ -33,4 +33,4 @@ pip-log.txt
 *.range
 *.model
 *.png
-*.f
+*.dat

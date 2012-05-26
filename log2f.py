@@ -160,30 +160,35 @@ def process_log(logfile, gt_urls, outfile):
 		for i in urls:
 			if remove_url_prefix(url) == remove_url_prefix(i):
 				return 1
-		return 0
+		return -1
 	
 	all_instances = []
-	cnt = 0
+	pos_cnt = 0
+	neg_cnt = 0
 	for ua_data_d in ip_data_d.values():
 		for page_arr in ua_data_d.values():
 			for page in page_arr:
 				pf = PageFeature(page)
 				label = gen_label(valid_urls, page.root.url)
 				if label == 1:
-					cnt += 1
+					pos_cnt += 1
+				else:
+					neg_cnt += 1
 				instance = pf.assemble_instance(label)
 				all_instances.append(instance)
-	ofile = open(outfile, 'ab')
+	print "+++#: ", pos_cnt
+	print "---#: ", neg_cnt
+	ofile = open(outfile, 'wb')
 	ofile.write('\n'.join(all_instances))
 	ofile.close()
-	print cnt
+	
 	
 def main():
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log of web-logger')
 	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
 						git@github.com:caesar0301/web-logger.git')
 	parser.add_argument('gtfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = 'log.f', help= 'output file containing LIBSVM instances')
+	parser.add_argument('-o', '--output', type=str, default = 'log.dat', help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
 	process_log(args.logfile, args.gtfile, args.output)

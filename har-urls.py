@@ -121,10 +121,9 @@ def process_har_file(input):
 	return real_pages, page_cands
 
 def main():
-	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from HAR file')
+	parser = argparse.ArgumentParser(description='Extracting urls from HAR file')
 	parser.add_argument('-f', '--input', type=str, help= 'a single HAR file as input')
 	parser.add_argument('-d', '--dir', type=str, help= 'file folder containing HAR file(s). All the HAR files under this folder will be processed.')
-	parser.add_argument('-b', '--balance', type=int, default = 0, help= '0(default) or 1, if balance the number of positive and negtive instances.')
 
 	args = parser.parse_args()
 	input_file = args.input
@@ -150,40 +149,12 @@ def main():
 					(rps, pcs) = process_har_file(os.path.join(root, file))
 					all_real_pages += rps
 					all_page_cands += pcs
-		# dump LIBSVM instances
-		all_instances = []
-		instances_pos = []
-		instances_neg = []
 		all_real_roots = [i.root for i in all_real_pages if i.root != None]
-		for pc in all_page_cands:
-			if pc.root in all_real_roots:
-				label = 1
-			else:
-				label = -1
-			pf = PageFeature(pc)
-			instance = pf.assemble_instance(label)
-			if label == 1:
-				instances_pos.append(instance)
-			else:
-				instances_neg.append(instance)
-		if balanced == 1:
-			all_instances += instances_pos
-			random.shuffle(instances_neg)
-			instances_neg = instances_neg[:len(instances_pos)]
-			all_instances += instances_neg
-		else:
-			all_instances += instances_pro
-			all_instances += instances_neg
-		print 'positive#: ', len(instances_pos)
-		print 'negtive#: ', len(instances_neg)
-		ofile = open('har.dat', 'wb')
-		ofile.write('\n'.join(all_instances))
-		ofile.close()
 		# dump urls
-		# all_real_urls = [i.url for i in all_real_roots]
-		# ofile = open('urls', 'wb')
-		# ofile.write('\n'.join(all_real_urls))
-		# ofile.close()
+		all_real_urls = [i.url for i in all_real_roots]
+		ofile = open('urls.dat', 'wb')
+		ofile.write('\n'.join(all_real_urls))
+		ofile.close()
 
 
 if __name__ == '__main__':
