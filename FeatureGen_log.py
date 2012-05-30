@@ -163,6 +163,8 @@ def process_log(logfile, gt_urls, outfile):
 		return -1
 	
 	all_instances = []
+	instances_pos = []
+	instances_neg = []
 	pos_cnt = 0
 	neg_cnt = 0
 	for ua_data_d in ip_data_d.values():
@@ -170,16 +172,16 @@ def process_log(logfile, gt_urls, outfile):
 			for page in page_arr:
 				pf = PageFeature(page)
 				label = gen_label(valid_urls, page.root.url)
-				if label == 1:
-					pos_cnt += 1
-				else:
-					neg_cnt += 1
 				instance = pf.assemble_instance(label)
-				all_instances.append(instance)
-	print "+++#: ", pos_cnt
-	print "---#: ", neg_cnt
+				if label == 1:
+					instances_pos.append(instance)
+				else:
+					instances_neg.append(instance)
+	all_instances = instances_pos + instances_neg
+	print 'positive#: ', len(instances_pos)
+	print 'negtive#: ', len(instances_neg)
 	ofile = open(outfile, 'wb')
-	ofile.write('\n'.join(all_instances))
+	ofile.write(''.join(all_instances))
 	ofile.close()
 	
 	
@@ -188,7 +190,7 @@ def main():
 	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
 						git@github.com:caesar0301/web-logger.git')
 	parser.add_argument('gtfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = 'log.dat', help= 'output file containing LIBSVM instances')
+	parser.add_argument('-o', '--output', type=str, default = 'features_log', help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
 	process_log(args.logfile, args.gtfile, args.output)

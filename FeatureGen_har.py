@@ -172,12 +172,12 @@ def main():
 			instances_neg = instances_neg[:len(instances_pos)]
 			all_instances += instances_neg
 		else:
-			all_instances += instances_pro
+			all_instances += instances_pos
 			all_instances += instances_neg
 		print 'positive#: ', len(instances_pos)
 		print 'negtive#: ', len(instances_neg)
-		ofile = open('har.dat', 'wb')
-		ofile.write('\n'.join(all_instances))
+		ofile = open('features_har', 'wb')
+		ofile.write(''.join(all_instances))
 		ofile.close()
 		# dump urls
 		# all_real_urls = [i.url for i in all_real_roots]
