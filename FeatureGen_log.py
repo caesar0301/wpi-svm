@@ -136,8 +136,10 @@ def process_web_object(res, wo):
 			ua_pages_dict = res[wo.user_ip]
 			if wo.user_agent in ua_pages_dict:
 				for page in ua_pages_dict[wo.user_agent][::-1]:
-					if page.own_this(wo):
+					if page.own_this(wo, 'l'):
 						page.add_obj(wo)
+						return None
+				return wo
 					
 def process_log(logfile, gt_urls, outfile):
 	""" Processing log file
@@ -153,8 +155,14 @@ def process_log(logfile, gt_urls, outfile):
 		all_wos += wos
 	all_wos.sort(lambda x,y: cmp(x, y), lambda x: x.start_time, False)
 	ip_data_d = {}
+	
+	jks = []
+	print 'all objs:', len(all_wos)
 	for wo in all_wos:
-		process_web_object(ip_data_d, wo)
+		jwo = process_web_object(ip_data_d, wo)
+		if jwo is not None:
+			jks.append(jwo)
+	print 'junks:', len(jks)
 	
 	def gen_label(urls, url):
 		for i in urls:
@@ -170,8 +178,16 @@ def process_log(logfile, gt_urls, outfile):
 	for ua_data_d in ip_data_d.values():
 		for page_arr in ua_data_d.values():
 			for page in page_arr:
+				# log page cands' urls
+				urlfile = open('candurls', 'ab')
+				urlfile.write(page.root.url+'\n')
+				urlfile.close()
+				
 				pf = PageFeature(page)
-				label = gen_label(valid_urls, page.root.url)
+				if len(page.objs) <= 1:
+					label = -1
+				else:
+					label = gen_label(valid_urls, page.root.url)
 				instance = pf.assemble_instance(label)
 				if label == 1:
 					instances_pos.append(instance)
@@ -180,17 +196,20 @@ def process_log(logfile, gt_urls, outfile):
 	all_instances = instances_pos + instances_neg
 	print 'positive#: ', len(instances_pos)
 	print 'negtive#: ', len(instances_neg)
-	ofile = open(outfile, 'wb')
-	ofile.write(''.join(all_instances))
-	ofile.close()
-	
+	if outfile is None:
+		for i in all_instances:
+			print i
+	else:
+		ofile = open(outfile, 'wb')
+		ofile.write(''.join(all_instances))
+		ofile.close()
 	
 def main():
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log of web-logger')
 	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
 						git@github.com:caesar0301/web-logger.git')
-	parser.add_argument('gtfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = 'features_log', help= 'output file containing LIBSVM instances')
+	parser.add_argument('urlfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
+	parser.add_argument('-o', '--output', type=str, default = None, help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
 	process_log(args.logfile, args.gtfile, args.output)

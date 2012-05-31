@@ -43,23 +43,25 @@ class WebPage(object):
 		self.urls = []
 		self.objs = []
 
-	def own_this(self, obj, rule = 'strict'):
+	def own_this(self, obj, rule = 's'):
 		""" Checking if the obj belongs to this page.
 		obj: an object of :WebObject
 		"""
-		if rule == 'strict':
+		if rule == 's':
 			for url in self.urls:
 				if obj.referrer and  obj.referrer == url:
 					return True
-		elif rule == 'loose':	
-			for url in self.urls:
-				pure_url = re.compile(r'^(\w+://)?([^#\?]+)#?\??')
-				if obj.referrer and url:
-					match_ref = pure_url.match(obj.referrer)
-					match_url = pure_url.match(url)
-					if match_ref and match_url:
-						if match_ref.group(2) == match_url.group(2):
-							return True
+		elif rule == 'l':
+			pure_url = re.compile(r'^(\w+://)?([^#\?]+)#?\??')
+			if obj.referrer:
+				match_ref = pure_url.match(obj.referrer)
+				if match_ref:
+					for url in self.urls:
+						if url:
+							match_url = pure_url.match(url)
+							if match_url:
+								if match_ref.group(2) == match_url.group(2):
+									return True
 		return False
 
 	def add_obj(self, obj):
@@ -86,7 +88,7 @@ class PageFeature(object):
 			<lable> <index1>:<value1> <index2>:<value2> ...
 		label: the label of this instance which can be any real number
 		"""
-		all_lines = open('fnames', 'rb').readlines()
+		all_lines = open('./conf/fnames', 'rb').readlines()
 		attributes = []
 		for i in all_lines:
 			line_strip = i.strip(' \n\t\r')
@@ -344,7 +346,7 @@ class PageFeature(object):
 		return (count, total_size, max_size, min_size, med_size, ave_size, max_time, min_time, med_time, ave_time)
 		
 def main():
-	all_lines = open('fnames', 'rb').readlines()
+	all_lines = open('./conf/fnames', 'rb').readlines()
 	attributes = []
 	for i in all_lines:
 		line_strip = i.strip(' \n\t\r')
