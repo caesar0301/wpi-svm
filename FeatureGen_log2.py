@@ -7,29 +7,21 @@ import hashlib
 import argparse
 
 from myweb import WebObject, WebPage, PageFeature
+import logbasic as basic
 
 def read_log(log_file):
 	""" Reading log file and return flows in JSON format.
 	log_file: name of log file of web-logger
 	Return: list of flow records
 	"""
-	all_lines = open(log_file, 'rb').readlines()
-	flows = []
-	for line in all_lines:
-		uni_line = unicode(line, 'utf-8', 'replace')
-		flow = json.loads(uni_line)
-		flows.append(flow)
-	flows.sort(lambda x,y: cmp(x['synt'], y['synt']), None, False)
-	return flows
+	all_rr = basic.read(log_file)
+	return all_rr
 			
-def parse_field(dict, key):
-	""" Simple dict wrapper
-	dict: name of dict object
-	key: name of key
-	Return: dict[key] or None
-	"""
+def get_value(dict, key):
 	try:
 		value = dict[key]
+		if value == 'N/A':
+			raise KeyError
 	except KeyError:
 		value = None
 	return value
@@ -58,62 +50,38 @@ def parse_content_type(data):
 	return content_type
 	
 
-def process_flow(flow):
-	""" Processing a flow record of log file, which is represented by one line.
+def process_rrp(rrlist):
+	""" Processing
 	Return: list of web objects
 	"""	
 	wo_list = []	# Web objects will be returned
-	source_ip = flow['sa']
-	http_pairs = flow['pairs']
-	for http_pair in http_pairs:
+	for rr in rrlist:
 		new_wo = WebObject()
-		request = parse_field(http_pair, 'req')
-		response = parse_field(http_pair, 'res')
-		if request is not None:
-			req_fbt = parse_field(request, 'fbt')
-			host = parse_field(request, 'host')
-			uri = parse_field(request, 'uri')
-			user_agent = parse_field(request, 'ua')
-			referrer = parse_field(request, 'ref')
-		else:
-			req_fbt = None
-			host = None
-			uri = None
-			user_agent = None
-			referrer = None
-		if response is not None:
-			rsp_status = parse_field(response, 'sta')
-			rsp_fbt = parse_field(response, 'fbt')
-			rsp_lbt = parse_field(response, 'lbt')
-			content_length = parse_field(response, 'conlen')
-			mime_type = parse_field(response, 'contyp')
-			re_location = parse_field(response, 'loc')
-		else:
-			rsp_status = None
-			rsp_fbt = None
-			rsp_lbt = None
-			content_length = None
-			mime_type = None
-			re_location = None
 		# Set values to members of new web object
-		new_wo.user_ip = source_ip	
-		new_wo.start_time = req_fbt != None and req_fbt or None
-		if None not in [req_fbt, rsp_lbt] and cmp(req_fbt, rsp_lbt) <= 0:
-			new_wo.total_time = rsp_lbt - req_fbt
-		if None not in [rsp_fbt, rsp_lbt] and cmp(rsp_fbt, rsp_lbt) <= 0:
-			new_wo.receiving_time = rsp_lbt - rsp_fbt
-		if None not in [host, uri]:
-			new_wo.url = host+uri
-		new_wo.status = rsp_status != None and rsp_status or None
-		new_wo.size = content_length != None and int(content_length) or 0
-		new_wo.type = mime_type != None and parse_content_type(mime_type) or None
-		new_wo.re_url = re_location != None and re_location or None
-		new_wo.user_agent = user_agent != None and user_agent or None
-		new_wo.referrer = referrer != None and remove_url_prefix(referrer) or None
+		new_wo.user_ip = get_value(rr, 'source_ip')
+		new_wo.start_time = get_value(rr, 'time')
+		dns = get_value(rr, 'dns')
+		connect = get_value(rr, 'connect')
+		send = get_value(rr, 'send')
+		wait = get_value(rr, 'wait')
+		receive = get_value(rr, 'receive')
+		timings = [dns, connect, send, wait, receive]
+		timings = [int(i) for i in timings if i != None]
+		new_wo.total_time = sum(timings)
+		rt = get_value(rr, 'receive')
+		new_wo.receiving_time = rt!=None and int(rt) or 0
+		new_wo.url = get_value(rr, 'url')
+		new_wo.status = int(get_value(rr, 'response_status'))
+		rbz = get_value(rr, 'response_body_size')
+		new_wo.size = rbz != None and int(rbz) or 0
+		new_wo.type = get_value(rr, 'response_content_type')
+		new_wo.re_url = get_value(rr, 'redirect_url')
+		new_wo.user_agent = get_value(rr, 'user_agent_id')
+		new_wo.referrer = get_value(rr, 'referrer')
 		wo_list.append(new_wo)
 	return wo_list
 	
-def process_web_object(res, wo):
+def process_web_object(wo, res):
 	""" Processing each web object
 	res: the dict resotring results. res has structure like {ip: {ua: [pages]}}
 	wo: web object
@@ -141,25 +109,24 @@ def process_web_object(res, wo):
 						return None
 				return wo
 					
-def process_log(logfile, gt_urls, outfile):
+def process_log(logfile, gt_urls):
 	""" Processing log file
 	logfile: name of logfile
 	gt_urls: name of file storing valid urls to deduce the labels of instances
 	outfile: name of output file
 	"""
 	valid_urls = open(gt_urls, 'rb').read().split('\n')
-	flows = read_log(logfile)
-	all_wos = []
-	for flow in flows:
-		wos = process_flow(flow)
-		all_wos += wos
+	print 'reading log...'
+	all_rr = read_log(logfile)
+	print 'processing rrp...'
+	all_wos = process_rrp(all_rr)
 	all_wos.sort(lambda x,y: cmp(x, y), lambda x: x.start_time, False)
+	print 'processing web objects...'
 	ip_data_d = {}
-	
 	jks = []
 	print 'all objs:', len(all_wos)
 	for wo in all_wos:
-		jwo = process_web_object(ip_data_d, wo)
+		jwo = process_web_object(wo, ip_data_d)
 		if jwo is not None:
 			jks.append(jwo)
 	print 'junks:', len(jks)
@@ -180,11 +147,10 @@ def process_log(logfile, gt_urls, outfile):
 			for page in page_arr:
 				# log page cands' urls
 				##################################
-				urlfile = open('candurls', 'ab')
+				urlfile = open(logfile+'.candurl', 'ab')
 				urlfile.write(page.root.url+'\n')
 				urlfile.close()
 				##################################
-				
 				pf = PageFeature(page)
 				label = gen_label(valid_urls, page.root.url)
 				# Rewrite label
@@ -199,25 +165,21 @@ def process_log(logfile, gt_urls, outfile):
 	all_instances = instances_pos + instances_neg
 	print 'positive#: ', len(instances_pos)
 	print 'negtive#: ', len(instances_neg)
-	if outfile is None:
-		for i in all_instances:
-			print i
-	else:
-		##################################
-		ofile = open(outfile, 'wb')
-		ofile.write(''.join(all_instances))
-		ofile.close()
-		##################################
+	##################################
+	ofile = open(logfile+'.instance', 'wb')
+	ofile.write(''.join(all_instances))
+	ofile.close()
+	##################################
+	print 'writing instances to "%s"' % logfile+'.instance'
+	print 'writing candidate URLs to "%s"' % logfile+'.candurl'
 	
 def main():
-	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log of web-logger')
-	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
-						git@github.com:caesar0301/web-logger.git')
+	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log. Output = logfile.instance')
+	parser.add_argument('logfile', type=str, help= 'log file containing the request/response pair')
 	parser.add_argument('urlfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = None, help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
-	process_log(args.logfile, args.urlfile, args.output)
+	process_log(args.logfile, args.urlfile)
 
 if __name__ == "__main__":
 	main()

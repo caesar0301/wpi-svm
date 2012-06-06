@@ -29,12 +29,17 @@ def main():
 	aurls = open(args.allurls, 'rb').read().split('\n')
 	
 	hit_cnt = 0
+	hit_urls = []
 	for url in surls:
 		if check_url(url, aurls):
+			hit_urls.append(url)
 			hit_cnt += 1
 	print 'hit: %d' % hit_cnt
 	print 'miss: %d' % (len(surls) - hit_cnt)
 	print 'accuracy: %f' % (float(hit_cnt)/len(surls))
+	ofile = open(args.sourceurls+'.hit', 'wb')
+	ofile.write('\n'.join(hit_urls))
+	ofile.close()
 
 if __name__ == "__main__":
 	main()

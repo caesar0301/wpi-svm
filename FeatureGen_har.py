@@ -125,13 +125,11 @@ def main():
 	parser.add_argument('-f', '--input', type=str, help= 'a single HAR file as input')
 	parser.add_argument('-d', '--dir', type=str, help= 'file folder containing HAR file(s). All the HAR files under this folder will be processed.')
 	parser.add_argument('-b', '--balance', type=int, default = 0, help= '0(default) or 1, if balance the number of positive and negtive instances.')
-	parser.add_argument('-o', '--output', type=str, default = None, help= 'output file name. (default stdio)')
 
 	args = parser.parse_args()
 	input_file = args.input
 	input_folder = args.dir
 	balanced = args.balance
-	output = args.output
 	if input_file is None and input_folder is None:
 		parser.print_help()
 		exit(1)
@@ -156,9 +154,9 @@ def main():
 		all_instances = []
 		instances_pos = []
 		instances_neg = []
-		all_real_roots = [i.root for i in all_real_pages if i.root != None and len(i.objs) > 1]
+		all_real_roots = [i.root for i in all_real_pages if i.is_valid()]
 		for pc in all_page_cands:
-			if pc.root in all_real_roots:
+			if pc.root in all_real_roots and pc.is_valid():
 				label = 1
 			else:
 				label = -1
@@ -178,18 +176,23 @@ def main():
 			all_instances += instances_neg
 		print 'positive#: ', len(instances_pos)
 		print 'negtive#: ', len(instances_neg)
-		if output is None:
-			for i in all_instances:
-				print i
-		else:
-			ofile = open(output, 'wb')
-			ofile.write(''.join(all_instances))
-			ofile.close()
+		
+		if input_file is not None:
+			output_prefix = input_file
+		elif input_folder is not None:
+			output_prefix = os.path.split(os.path.dirname(input_folder))[1]
+		##################################
+		ofile = open(output_prefix+'.instance', 'wb')
+		ofile.write(''.join(all_instances))
+		ofile.close()
+		##################################
 		# dump urls
+		##################################
 		all_real_urls = [i.url for i in all_real_roots]
-		ofile = open('harurls', 'wb')
+		ofile = open(output_prefix+'.pageurl', 'wb')
 		ofile.write('\n'.join(all_real_urls))
 		ofile.close()
+		##################################
 
 
 if __name__ == '__main__':

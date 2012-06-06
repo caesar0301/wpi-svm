@@ -42,3 +42,13 @@ size_of_unidentified_objects_median
 size_of_unidentified_objects_average
 downloading_time_of_unidentified_median
 downloading_time_of_unidentified_average
+
+
+"logbaic.py"
+Supporting basic fuctions of log procession.
+
+New Format:
+plain text
+one line for one web request/response
+time	dns	connect	send	wait	receive	flow-id	user-agent-id	sourceip	sourceport	destip	destport	request-version	response-version	request-method	response-status	request-header-size	request-body-size	response-header-size	response-body-size	response-content-type	url referrer	redirect-url
+Seperator between items is '\t\t'. Lost item is replaced by 'N/A'

@@ -3,6 +3,7 @@
 # Author: chenxm 2012-05-22
 #from __future__ import division
 import re, math
+import utilities
 
 class WebObject(object):
 	""" Defining the class for web objects.
@@ -23,6 +24,8 @@ class WebObject(object):
 	def is_root(self):
 		""" Check if the object is a HTML file. 
 		"""
+		if self.type is None:
+			return False
 		ct_re = re.compile(r'\w+\/(\w+)')
 		ct_mch = ct_re.match(self.type)
 		sub_t = None
@@ -32,7 +35,7 @@ class WebObject(object):
 			return True
 		else:
 			return False
-			
+							
 class WebPage(object):
 	""" Page candidate insists of a HTML file as root and following referring non-HTML objects.
 	"""
@@ -49,7 +52,7 @@ class WebPage(object):
 		"""
 		if rule == 's':
 			for url in self.urls:
-				if obj.referrer and  obj.referrer == url:
+				if obj.referrer and utilities.remove_url_prefix(obj.referrer) == utilities.remove_url_prefix(url):
 					return True
 		elif rule == 'l':
 			pure_url = re.compile(r'^(\w+://)?([^#\?]+)#?\??')
@@ -64,12 +67,22 @@ class WebPage(object):
 									return True
 		return False
 
-	def add_obj(self, obj):
+	def add_obj(self, obj, root = False):
 		""" Add new object to this page
 		obj: an object of :WebObject
 		"""
+		if root:
+			self.root = obj
 		self.urls.append(obj.url)
 		self.objs.append(obj)
+		
+	def is_valid(self):
+		""" Check if the page is valid
+		"""
+		if self.root != None and len(set(self.objs)) > 1:
+			return True
+		else:
+			return False
 		
 class PageFeature(object):
 	""" Extracting features of web page.
