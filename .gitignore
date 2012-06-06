@@ -34,3 +34,12 @@ pip-log.txt
 *.model
 *.png
 *.dat
+*.log
+*.candurl
+*.instance
+*.pos
+*.neg
+*.ssulr
+*.hit
+*.uaid
+*.pageurl
