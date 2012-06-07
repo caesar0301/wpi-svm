@@ -2,19 +2,20 @@
 # This module constains some commom classes about web object and page
 # Author: chenxm 2012-05-22
 #from __future__ import division
-import re, math
+import re, math, datetime, random
 import utilities
+import logbasic as basic
 
 class WebObject(object):
 	""" Defining the class for web objects.
 	"""
 	def __init__(self):
-		self.start_time = None
-		self.total_time = None
-		self.receiving_time = None
+		self.start_time = None	# datetime
+		self.total_time = None	# timedelta
+		self.receiving_time = None	#int (ms)
 		self.url = None
 		self.status = None
-		self.size = None
+		self.size = None	#int (Byte)
 		self.type = None
 		self.referrer = None
 		self.re_url = None
@@ -43,6 +44,7 @@ class WebPage(object):
 		""" root_obj: a HTML object of :WebObject
 		"""
 		self.root = None
+		self.ref = None
 		self.urls = []
 		self.objs = []
 
@@ -71,10 +73,11 @@ class WebPage(object):
 		""" Add new object to this page
 		obj: an object of :WebObject
 		"""
-		if root:
-			self.root = obj
-		self.urls.append(obj.url)
-		self.objs.append(obj)
+		if obj not in self.objs:
+			if root:
+				self.root = obj
+			self.urls.append(obj.url)
+			self.objs.append(obj)
 		
 	def is_valid(self):
 		""" Check if the page is valid
@@ -83,6 +86,20 @@ class WebPage(object):
 			return True
 		else:
 			return False
+			
+	def total_seconds(self):
+		all_objs = self.objs
+		all_objs.sort(lambda x,y: cmp(x,y), lambda x: x.start_time, False)
+		obj0 = all_objs[0]
+		start_time = obj0.start_time
+		end_time = start_time + obj0.total_time
+		for obj in all_objs[1:]:
+			obj_start = obj.start_time
+			obj_end = obj_start + obj.total_time
+			if obj_end >= end_time:
+				end_time = obj_end
+		ret = (end_time - start_time).total_seconds()
+		return ret
 		
 class PageFeature(object):
 	""" Extracting features of web page.
@@ -94,6 +111,7 @@ class PageFeature(object):
 		self.f_dict = {}
 		self.__server_info()
 		self.__object_info()
+		self.__ref_info()
 
 	def assemble_instance(self, label):
 		""" Assembling instances for learning and testing which would be used by LIBSVM.
@@ -113,6 +131,42 @@ class PageFeature(object):
 			instance += ' %d:%f' % (attributes.index(att)+1, att_v)
 		instance += '\n'
 		return instance
+		
+	def __ref_info(self):
+		parent = self.owner.ref
+		child = self.owner.root
+		time_gap = random.randint(90, 600)	# seconds
+		if None not in (parent, child):
+			parent_time = parent.start_time
+			child_time = child.start_time
+			time_gap = (child_time - parent_time).total_seconds()
+		self.f_dict['time_after_referrer'] = time_gap
+		referrer_type_is_html = 0
+		referrer_type_is_image = 0
+		referrer_type_is_css = 0
+		referrer_type_is_flash = 0
+		referrer_type_is_javascript = 0
+		referrer_type_is_unidentified = 0
+		if parent is not None:
+			subtype = self.__which_type(parent)
+			if subtype == 'image':
+				referrer_type_is_image = 1
+			elif subtype == 'html':
+				referrer_type_is_html = 1
+			elif subtype == 'css':
+				referrer_type_is_css = 1
+			elif subtype == 'flash':
+				referrer_type_is_flash = 1
+			elif subtype == 'js':
+				referrer_type_is_javascript = 1
+			else:
+				referrer_type_is_unidentified = 1
+		self.f_dict['referrer_type_is_html'] = referrer_type_is_html
+		self.f_dict['referrer_type_is_image'] = referrer_type_is_image
+		self.f_dict['referrer_type_is_css'] = referrer_type_is_css
+		self.f_dict['referrer_type_is_flash'] = referrer_type_is_flash
+		self.f_dict['referrer_type_is_javascript'] = referrer_type_is_javascript
+		self.f_dict['referrer_type_is_unidentified'] = referrer_type_is_unidentified
 
 	def __server_info(self):
 		""" Extracting featrues about server
@@ -173,10 +227,7 @@ class PageFeature(object):
 		self.f_dict['number_of_origins_contacted'] = len(origin_servers)
 		self.f_dict['fraction_of_nonorigin_servers_contacted'] = float(len(nonorigin_servers)) / (len(origin_servers) + len(nonorigin_servers))
 
-	def __object_info(self):
-		""" Extracting features about every kind of objects
-		"""
-		all_objects = self.owner.objs
+	def __which_type(self, obj):
 		subtype_re = {
 			r'.*(jpeg|jpg|gif|png|bmp|ppm|pgm|pbm|pnm|tiff|exif|cgm|svg).*': 'image',
 			r'.*(flash|flv).*': 'flash',
@@ -184,6 +235,19 @@ class PageFeature(object):
 			r'.*(javascript|js).*': 'js',
 			r'.*(html|htm).*': 'html',
 		}
+		if obj.type != None:
+			for regex in subtype_re.keys():
+				if re.match(re.compile(regex, re.I), obj.type):
+					return subtype_re[regex]
+				else:
+					continue
+		return 'others'
+			
+	def __object_info(self):
+		""" Extracting features about every kind of objects
+		"""
+		all_objects = self.owner.objs
+
 		type_obj_dict = {
 		'others': [],
 		'image': [],
@@ -193,24 +257,16 @@ class PageFeature(object):
 		'html': []
 		}
 
-		def which_type(obj):
-			if obj.type != None:
-				for regex in subtype_re.keys():
-					if re.match(re.compile(regex, re.I), obj.type):
-						return subtype_re[regex]
-					else:
-						continue
-			return 'others'
-
 		# Classifying objects
 		for obj in all_objects:
-			subtype = which_type(obj)
+			subtype = self.__which_type(obj)
 			type_obj_dict[subtype].append(obj)
 
 		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
 			= self.__pro_subtype_objects(all_objects)
-		self.f_dict['dt_of_all_objects'] = 0
+		self.f_dict['dt_of_all_objects'] = self.owner.total_seconds()
 		self.f_dict['number_of_all_objects'] = number
+		self.f_dict['average_dt_of_one_object'] = self.f_dict['dt_of_all_objects']/self.f_dict['number_of_all_objects']
 		self.f_dict['size_of_all_objects'] = total_size
 		self.f_dict['all_size_max'] = max_size
 		self.f_dict['all_size_min'] = min_size

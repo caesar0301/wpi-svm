@@ -6,167 +6,82 @@ import json, re
 import hashlib
 import argparse
 
-from myweb import WebObject, WebPage, PageFeature
-
-def read_log(log_file):
-	""" Reading log file and return flows in JSON format.
-	log_file: name of log file of web-logger
-	Return: list of flow records
-	"""
-	all_lines = open(log_file, 'rb').readlines()
-	flows = []
-	for line in all_lines:
-		uni_line = unicode(line, 'utf-8', 'replace')
-		flow = json.loads(uni_line)
-		flows.append(flow)
-	flows.sort(lambda x,y: cmp(x['synt'], y['synt']), None, False)
-	return flows
+from myWeb import WebPage, PageFeature
+import logbasic as basic
+from myGraph import *
+import utilities
 			
-def parse_field(dict, key):
-	""" Simple dict wrapper
-	dict: name of dict object
-	key: name of key
-	Return: dict[key] or None
-	"""
+def get_value(dict, key):
 	try:
 		value = dict[key]
+		if value == 'N/A':
+			raise KeyError
 	except KeyError:
 		value = None
 	return value
 	
-def remove_url_prefix(url):
-	""" Remove the prefix of url
-	url: input url string
-	"""
-	url_regex = re.compile(r"^(\w+:?//)?(.*)$", re.IGNORECASE)
-	url_match = url_regex.match(url)
-	if url_match:
-		url = url_match.group(2)
-	return url
-	
-def parse_content_type(data):
-	""" Parsing the content type from mimetype string of HTTP header
-	data: mimetype string of HTTP header
-	"""
-	mediatype_re = re.compile(r'^([\w\-+.]+)/([\w\-+.]+)(?:\s*;?)((?:\s*[^;]+\s*;?)*)\s*$')
-	match = mediatype_re.match(data)
-	content_type = None
-	if match:
-		type = match.group(1).lower()
-		subtype = match.group(2).lower()
-		content_type = "%s/%s" % (type, subtype)
-	return content_type
-	
-
-def process_flow(flow):
-	""" Processing a flow record of log file, which is represented by one line.
-	Return: list of web objects
-	"""	
-	wo_list = []	# Web objects will be returned
-	source_ip = flow['sa']
-	http_pairs = flow['pairs']
-	for http_pair in http_pairs:
-		new_wo = WebObject()
-		request = parse_field(http_pair, 'req')
-		response = parse_field(http_pair, 'res')
-		if request is not None:
-			req_fbt = parse_field(request, 'fbt')
-			host = parse_field(request, 'host')
-			uri = parse_field(request, 'uri')
-			user_agent = parse_field(request, 'ua')
-			referrer = parse_field(request, 'ref')
-		else:
-			req_fbt = None
-			host = None
-			uri = None
-			user_agent = None
-			referrer = None
-		if response is not None:
-			rsp_status = parse_field(response, 'sta')
-			rsp_fbt = parse_field(response, 'fbt')
-			rsp_lbt = parse_field(response, 'lbt')
-			content_length = parse_field(response, 'conlen')
-			mime_type = parse_field(response, 'contyp')
-			re_location = parse_field(response, 'loc')
-		else:
-			rsp_status = None
-			rsp_fbt = None
-			rsp_lbt = None
-			content_length = None
-			mime_type = None
-			re_location = None
-		# Set values to members of new web object
-		new_wo.user_ip = source_ip	
-		new_wo.start_time = req_fbt != None and req_fbt or None
-		if None not in [req_fbt, rsp_lbt] and cmp(req_fbt, rsp_lbt) <= 0:
-			new_wo.total_time = rsp_lbt - req_fbt
-		if None not in [rsp_fbt, rsp_lbt] and cmp(rsp_fbt, rsp_lbt) <= 0:
-			new_wo.receiving_time = rsp_lbt - rsp_fbt
-		if None not in [host, uri]:
-			new_wo.url = host+uri
-		new_wo.status = rsp_status != None and rsp_status or None
-		new_wo.size = content_length != None and int(content_length) or 0
-		new_wo.type = mime_type != None and parse_content_type(mime_type) or None
-		new_wo.re_url = re_location != None and re_location or None
-		new_wo.user_agent = user_agent != None and user_agent or None
-		new_wo.referrer = referrer != None and remove_url_prefix(referrer) or None
-		wo_list.append(new_wo)
-	return wo_list
-	
-def process_web_object(res, wo):
-	""" Processing each web object
-	res: the dict resotring results. res has structure like {ip: {ua: [pages]}}
-	wo: web object
-	"""
-	if wo.type and wo.is_root():
-		if wo.status in [200]:
+def process_tree(tree):
+	t_refs = tree.ref_node_d.values()	# We choose all the referred nodes as main object candidates
+	main_obj_cands = []
+	for i in t_refs:
+		if tree[i].is_root():
+			main_obj_cands.append(tree[i])
+	pages = []
+	if len(main_obj_cands) > 0:
+		main_obj_cands.sort(lambda x,y: cmp(x,y), lambda x: x.start_time, False)	# ordered by +time
+		cand_ids = [i.identifier for i in main_obj_cands]
+		# Find final page roots
+		roots = []
+		for cand in main_obj_cands:
+			cand_pred_id = cand.bpointer
+			cand_pred = None
+			if cand_pred_id is not None:
+				cand_pred = tree[cand_pred_id]
+			roots.append((cand, cand_pred))
+		rootids = [i[0].identifier for i in roots]
+		for root in roots:
 			new_page = WebPage()
-			new_page.root = wo
-			new_page.add_obj(wo)
-			if wo.user_ip in res:
-				ua_pages_dict = res[wo.user_ip]
-				if wo.user_agent in ua_pages_dict:
-					ua_pages_dict[wo.user_agent].append(new_page)
-				else:
-					ua_pages_dict[wo.user_agent] = [new_page]
-			else:
-				res[wo.user_ip] = {wo.user_agent: [new_page]}
-	else:
-		if wo.user_ip in res:
-			ua_pages_dict = res[wo.user_ip]
-			if wo.user_agent in ua_pages_dict:
-				for page in ua_pages_dict[wo.user_agent][::-1]:
-					if page.own_this(wo, 'l'):
-						page.add_obj(wo)
-						return None
-				return wo
+			new_page.root = root[0]
+			new_page.ref = root[1]
+			new_page.add_obj(root[0], True)
+			pages.append(new_page)
+			for nodeid in tree.expand_tree(root[0].identifier, filter = lambda x: x not in rootids):
+				new_page.add_obj(tree[nodeid])
+	return pages
 					
-def process_log(logfile, gt_urls, outfile):
+def process_log(logfile, gt_urls):
 	""" Processing log file
 	logfile: name of logfile
 	gt_urls: name of file storing valid urls to deduce the labels of instances
 	outfile: name of output file
 	"""
 	valid_urls = open(gt_urls, 'rb').read().split('\n')
-	flows = read_log(logfile)
-	all_wos = []
-	for flow in flows:
-		wos = process_flow(flow)
-		all_wos += wos
-	all_wos.sort(lambda x,y: cmp(x, y), lambda x: x.start_time, False)
-	ip_data_d = {}
+	print 'reading log...'
+	all_rr = basic.read(logfile)
 	
-	jks = []
-	print 'all objs:', len(all_wos)
-	for wo in all_wos:
-		jwo = process_web_object(ip_data_d, wo)
-		if jwo is not None:
-			jks.append(jwo)
-	print 'junks:', len(jks)
+	print 'processing rrp...'
+	all_nodes = []
+	for rr in all_rr:
+		all_nodes.append(create_node_from_rr(rr))
+	all_nodes.sort(lambda x,y: cmp(x,y), lambda x: x.start_time, False)
+		
+	new_graph = Graph()
+	print 'processing nodes...'
+	for node in all_nodes:
+		new_graph.add_node(node)
+	print 'graph ready...'
+	print 'finding pages...'
+	all_trees = new_graph.all_trees()
+	print 'Trees:', len(all_trees)
+	
+	all_pages = []
+	for tree in all_trees:
+		all_pages += process_tree(tree)
+	print 'Pages:', len(all_pages)
 	
 	def gen_label(urls, url):
 		for i in urls:
-			if remove_url_prefix(url) == remove_url_prefix(i):
+			if utilities.remove_url_prefix(url) == utilities.remove_url_prefix(i):
 				return 1
 		return -1
 	
@@ -174,50 +89,43 @@ def process_log(logfile, gt_urls, outfile):
 	instances_pos = []
 	instances_neg = []
 	pos_cnt = 0
-	neg_cnt = 0
-	for ua_data_d in ip_data_d.values():
-		for page_arr in ua_data_d.values():
-			for page in page_arr:
-				# log page cands' urls
-				##################################
-				urlfile = open('candurls', 'ab')
-				urlfile.write(page.root.url+'\n')
-				urlfile.close()
-				##################################
-				
-				pf = PageFeature(page)
-				label = gen_label(valid_urls, page.root.url)
-				# Rewrite label
-				if len(page.objs) <= 1:
-					label = -1
+	neg_cnt = 0	
+	for page in all_pages:
+		# log page cands' urls
+		##################################
+		urlfile = open(logfile+'.instance.url', 'ab')
+		urlfile.write(page.root.url+'\n')
+		urlfile.close()
+		##################################
+		pf = PageFeature(page)
+		label = gen_label(valid_urls, page.root.url)
+		# Rewrite label
+		if len(page.objs) <= 1:
+			label = -1
 
-				instance = pf.assemble_instance(label)
-				if label == 1:
-					instances_pos.append(instance)
-				else:
-					instances_neg.append(instance)
+		instance = pf.assemble_instance(label)
+		if label == 1:
+			instances_pos.append(instance)
+		else:
+			instances_neg.append(instance)
 	all_instances = instances_pos + instances_neg
 	print 'positive#: ', len(instances_pos)
 	print 'negtive#: ', len(instances_neg)
-	if outfile is None:
-		for i in all_instances:
-			print i
-	else:
-		##################################
-		ofile = open(outfile, 'wb')
-		ofile.write(''.join(all_instances))
-		ofile.close()
-		##################################
+	##################################
+	ofile = open(logfile+'.instance', 'wb')
+	ofile.write(''.join(all_instances))
+	ofile.close()
+	##################################
+	print 'writing instances to "%s.instance"' % logfile
+	print 'writing candidate URLs to "%s.instance.url"' % logfile
 	
 def main():
-	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log of web-logger')
-	parser.add_argument('logfile', type=str, help= 'log file of web-logger: \
-						git@github.com:caesar0301/web-logger.git')
+	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log. Output = logfile.instance')
+	parser.add_argument('logfile', type=str, help= 'log file containing the request/response pair')
 	parser.add_argument('urlfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
-	parser.add_argument('-o', '--output', type=str, default = None, help= 'output file containing LIBSVM instances')
 
 	args = parser.parse_args()
-	process_log(args.logfile, args.urlfile, args.output)
+	process_log(args.logfile, args.urlfile)
 
 if __name__ == "__main__":
 	main()

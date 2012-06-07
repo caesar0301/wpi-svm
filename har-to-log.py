@@ -1,7 +1,6 @@
 #-*- coding: utf-8 -*-
 # Author: chenxm
-import json, argparse, os
-import re, uuid
+import json, argparse, os, codecs, re, uuid
 import logbasic as basic
 
 def parse_time(timestr):
@@ -55,7 +54,7 @@ class RRPair(object):
 		self.type = None
 	
 def process_har(readfile, ua_id):
-	log = json.load(open(readfile, 'rb'))['log']
+	log = json.load(codecs.open(readfile, 'rb', 'utf-8', 'replace'))['log']
 	entries = log['entries']
 	objects = []
 	for har_ent in entries:
@@ -174,8 +173,8 @@ def main():
 				response_header_size = rr.response_header_size,
 				response_body_size = rr.response_body_size,
 				response_content_type = rr.type)
-		print 'writing useragent to file "%s"' % output_prefix+'.uaid'
-		print 'writing log to file "%s"' % output_prefix+'.log'
+		print 'writing useragent to file "%s"' % (output_prefix+'.uaid')
+		print 'writing log to file "%s"' % (output_prefix+'.log')
 
 			
 if __name__ == '__main__':

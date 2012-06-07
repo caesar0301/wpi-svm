@@ -1,25 +1,5 @@
 #coding: utf-8
-import codecs
-
-def mylogger(str):
-	#print 'warnning: %s' % str
-	pass
-	
-def check_arg(arg):
-	if arg is None:
-		mylogger('%s is absent.' % arg)
-	
-def parse_field(dict, key):
-	""" Simple dict wrapper
-	dict: name of dict object
-	key: name of key
-	Return: dict[key] or None
-	"""
-	try:
-		value = dict[key]
-	except KeyError:
-		value = None
-	return value
+import codecs, re, datetime
 
 __attribute_names = [
 	'time', 
@@ -43,6 +23,43 @@ __attribute_names = [
 	'referrer',
 	'redirect_url',
 ]
+
+def mylogger(str):
+	#print 'warnning: %s' % str
+	pass
+	
+def check_arg(arg):
+	if arg is None:
+		mylogger('%s is absent.' % arg)
+	
+def parse_field(dict, key):
+	""" Simple dict wrapper
+	dict: name of dict object
+	key: name of key
+	Return: dict[key] or None
+	"""
+	try:
+		value = dict[key]
+	except KeyError:
+		value = None
+	return value
+
+def parse_time(ts):
+	time_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})')
+	match = time_re.match(ts)
+	if match:
+		year = int(match.group(1))
+		month = int(match.group(2))
+		day = int(match.group(3))
+		hour = int(match.group(4))
+		minute = int(match.group(5))
+		seconds = int(match.group(6))
+		microseconds = int(match.group(7))*1000
+		dt = datetime.datetime(year, month, day, hour, minute, seconds, microseconds)
+		return dt
+	else:
+		return None
+		
 		
 def read(filename):
 	datafile = open(filename, 'rb')

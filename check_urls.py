@@ -1,6 +1,7 @@
 # coding: utf-8
 # Check the url match
 # Author: chenxm, 2012-05-31
+from __future__ import division
 import argparse, re
 
 def remove_url_prefix(url):
@@ -21,25 +22,42 @@ def check_url(url, allurls):
 		
 def main():
 	parser = argparse.ArgumentParser(description='Check if the source urls exist.')
-	parser.add_argument('sourceurls', type=str, help= 'source urls to be checked')
-	parser.add_argument('allurls', type=str, help= 'all urls, the groudtruth')
+	parser.add_argument('srcfile', type=str, help= 'source urls to be checked')
+	parser.add_argument('gtfile', type=str, help= 'all urls, the groudtruth')
 
 	args = parser.parse_args()
-	surls = open(args.sourceurls, 'rb').read().split('\n')
-	aurls = open(args.allurls, 'rb').read().split('\n')
+	srcfile = args.srcfile
+	gtfile = args.gtfile
+	surls = open(srcfile, 'rb').read().split('\n')
+	aurls = open(gtfile, 'rb').read().split('\n')
 	
 	hit_cnt = 0
 	hit_urls = []
-	for url in surls:
-		if check_url(url, aurls):
+	tp = 0
+	fp = 0
+	tn = None
+	fn = 0
+	for url in aurls:
+		if check_url(url, surls):
 			hit_urls.append(url)
-			hit_cnt += 1
-	print 'hit: %d' % hit_cnt
-	print 'miss: %d' % (len(surls) - hit_cnt)
-	print 'accuracy: %f' % (float(hit_cnt)/len(surls))
-	ofile = open(args.sourceurls+'.hit', 'wb')
+			tp += 1
+		else:
+			fn += 1
+	fp = len(surls) - tp
+	print 'writing hit urls to %s' % (srcfile+'.hit')
+	ofile = open(srcfile+'.hit', 'wb')
 	ofile.write('\n'.join(hit_urls))
 	ofile.close()
+	
+	precision = tp/(tp + fp)
+	recall = tp/(tp + fn)
+	fscore = 2 * precision * recall/(precision + recall)
+	sensitivity = tp / (tp + fn)
+	print 'TP: %d, FP: %d, TN: None, FN: %d' % (tp, fp, fn)
+	print 'Precision: %.3f' % precision
+	print 'Recall: %.3f' % recall
+	print 'F-Score: %.3f' % fscore
+	print 'Sensitivity: %.3f' % sensitivity
 
 if __name__ == "__main__":
 	main()

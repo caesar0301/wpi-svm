@@ -2,10 +2,9 @@
 # This program extracts features as the input of LIBSVM from HAR file 
 # Author: chenxm
 
-import json, re, math, argparse, os, uuid, random
-from myweb import WebObject
-from myweb import WebPage
-from myweb import PageFeature
+import json, re, math, argparse, os, uuid, random, datetime
+from myWeb import *
+import logbasic
 
 def parse_field(dict, key):
 	""" Simple dict wrapper
@@ -27,11 +26,24 @@ class MyObject(WebObject):
 		"""
 		WebObject.__init__(self)
 		self.pageid = har_ent['pageref']
-		self.start_time = None
-		self.total_time = parse_field(har_ent, 'time')
+		sdt = parse_field(har_ent, 'startedDateTime')
+		if sdt is not None:
+			self.start_time = logbasic.parse_time(sdt)
+		# tot_time = parse_field(har_ent, 'time')
+		# if tot_time is not None:
+		# 	self.total_time = datetime.timedelta(milliseconds = int(tot_time))
 		timings = parse_field(har_ent, 'timings')
 		if timings is not None:
-			self.receiving_time = parse_field(timings, 'receive')
+			dns = parse_field(timings, 'dns')
+			connect = parse_field(timings, 'connect')
+			send = parse_field(timings, 'send')
+			wait = parse_field(timings, 'wait')
+			receive = parse_field(timings, 'receive')
+			timings = [dns, connect, send, wait, receive]
+			timings = [int(i) for i in timings if i != None]
+			self.total_time = datetime.timedelta(milliseconds = sum(timings))
+			if receive is not None:
+				self.receiving_time = int(receive)
 		request = parse_field(har_ent, 'request')
 		response = parse_field(har_ent, 'response')
 		if request is not None:

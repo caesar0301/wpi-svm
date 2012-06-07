@@ -4,7 +4,6 @@ number_of_origins_contacted
 fraction_of_nonorigin_servers_contacted
 dt_of_all_objects
 size_of_all_objects
-average_dt_of_one_object
 number_of_all_objects
 all_size_max
 all_size_min
