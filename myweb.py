@@ -135,7 +135,7 @@ class PageFeature(object):
 	def __ref_info(self):
 		parent = self.owner.ref
 		child = self.owner.root
-		time_gap = random.randint(90, 600)	# seconds
+		time_gap = random.randint(300, 900)	# seconds
 		if None not in (parent, child):
 			parent_time = parent.start_time
 			child_time = child.start_time

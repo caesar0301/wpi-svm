@@ -43,4 +43,4 @@ pip-log.txt
 *.hit
 *.uaid
 *.pageurl
-allhar/*
+data/*

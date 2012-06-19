@@ -5,6 +5,7 @@
 import json, re, math, argparse, os, uuid, random, datetime
 from myWeb import *
 import logbasic
+import utilities
 
 def parse_field(dict, key):
 	""" Simple dict wrapper
@@ -85,7 +86,8 @@ def process_har_file(input):
 	har_log = json.loads(uni_str)['log']
 	web_pages = har_log['pages']
 	web_objects = har_log['entries']
-	# find real pages which are recorded in HAR file.
+	
+	# find real pages of each HAR file.
 	real_pages = []
 	for item in web_pages:
 		new_page = MyPage(item['id'])
@@ -104,23 +106,30 @@ def process_har_file(input):
 					found_page.root = wo
 		else:
 			print 'HAR error: entry ref error.'
-			assert(0)		
+			assert(0)
+					
 	# find page candidates
 	page_cands = []
-	junk_html_objs = []
-	junk_nonhtml_objs = []
 	all_objs = []
 	for page in real_pages:
 		all_objs += page.objs
+		
+	def find_ref(objs, web_obj):
+		if web_obj.referrer is not None:
+			ref_url = utilities.remove_url_prefix(web_obj.referrer)
+			for obj in objs:
+				if obj.url is not None and ref_url == utilities.remove_url_prefix(obj.url):
+					return obj
+		return None
+		
 	for wo in all_objs:
 		if wo.is_root():
 			if wo.status == 200:
 				new_page_c = MyPage()
 				new_page_c.root = wo
+				new_page_c.ref = find_ref(all_objs, wo)
 				new_page_c.add_obj(wo)
 				page_cands.append(new_page_c)
-			else:
-				junk_html_objs.append(wo)
 		else:
 			found = False
 			for pc in page_cands:
@@ -128,8 +137,6 @@ def process_har_file(input):
 					pc.add_obj(wo)
 					found = True
 					break
-			if found is False:
-				junk_nonhtml_objs.append(wo)
 	return real_pages, page_cands
 
 def main():
@@ -155,7 +162,7 @@ def main():
 		elif input_folder is not None:
 			# Processing all HAR file under the folder
 			for root, dirs, files in os.walk(input_folder):
-				for file in files:
+				for file in files[:]:
 					suffix = file.rsplit('.', 1)[1]
 					if suffix != 'har':
 						continue
