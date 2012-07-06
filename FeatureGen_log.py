@@ -88,21 +88,19 @@ def process_log(logfile, gt_urls):
 	all_instances = []
 	instances_pos = []
 	instances_neg = []
+	instance_pos_url = []
 	pos_cnt = 0
 	neg_cnt = 0	
 	for page in all_pages:
-		# log page cands' urls
-		##################################
-		urlfile = open(logfile+'.instance.url', 'ab')
-		urlfile.write(page.root.url+'\n')
-		urlfile.close()
-		##################################
 		pf = PageFeature(page)
 		label = gen_label(valid_urls, page.root.url)
 		# Rewrite label
 		if len(page.objs) <= 1:
 			label = -1
 
+                if label == 1:
+                        instance_pos_url.append(page.root.url)
+                
 		instance = pf.assemble_instance(label)
 		if label == 1:
 			instances_pos.append(instance)
@@ -112,12 +110,17 @@ def process_log(logfile, gt_urls):
 	print 'positive#: ', len(instances_pos)
 	print 'negtive#: ', len(instances_neg)
 	##################################
-	ofile = open(logfile+'.instance', 'wb')
+	log_instance = logfile+'.instance'
+	ofile = open(log_instance, 'wb')
 	ofile.write(''.join(all_instances))
+	ofile.close()
+
+	instance_page = log_instance+'.page'
+	ofile = open(instance_page, 'wb')
+	ofile.write('\n'.join(instance_pos_url))
 	ofile.close()
 	##################################
 	print 'writing instances to "%s.instance"' % logfile
-	print 'writing candidate URLs to "%s.instance.url"' % logfile
 	
 def main():
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log. Output = logfile.instance')

@@ -20,7 +20,8 @@ if not is_win32:
 	svmtrain_exe="../svm-train"
 	svmpredict_exe="../svm-predict"
 else:
-	gridpy_exe = r".\grid.py -log2c -2,9,2 -log2g 1,-11,-2"
+	#gridpy_exe = r".\grid.py -log2c -2,9,2 -log2g 1,-11,-2"
+        gridpy_exe = r".\grid.py -log2c -2,9,2 -log2g 1,-11,-2 -t 0"
 	svmtrain_exe=r"..\windows\svmtrain.exe"
 	svmpredict_exe=r"..\windows\svmpredict.exe"
 

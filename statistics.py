@@ -24,7 +24,8 @@ def main():
 			pos+=1
 		else:
 			neg+=1
-	print pos, neg
+	print 'Positive instances: %d' % pos
+	print 'Negative instances: %d' % neg
 	pairs = zip(origin_labels, predict_labels)
 	tp = 0
 	fp = 0
@@ -39,12 +40,38 @@ def main():
 			fp += 1
 		elif pair == ('-1', '-1'):
 			tn += 1
-	precision = tp/(tp + fp)
-	recall = tp/(tp + fn)
-	fscore = 2 * precision * recall/(precision + recall)
-	sensitivity = tp / (tp + fn)
-	specificity = tn / (tn + fp)
-	bac = (sensitivity + specificity)/2
+
+	try:	
+		precision = tp/(tp + fp)
+	except ZeroDivisionError:
+		precision = -1.0
+
+	try:
+		recall = tp/(tp + fn)
+	except ZeroDivisionError:
+		recall = -1.0
+
+	try:
+		if precision == -1.0: precision = 0
+		if recall == -1.0: recall = 0
+		fscore = 2 * precision * recall/(precision + recall)
+	except ZeroDivisionError:
+		fscore = -1.0
+
+	try:
+		sensitivity = tp / (tp + fn)
+	except ZeroDivisionError:
+		sensitivity = -1.0
+
+	try:
+		specificity = tn / (tn + fp)
+	except ZeroDivisionError:
+		specificity = -1.0
+
+	if sensitivity == -1.0: sensitivity = 0
+	if specificity == -1.0: specificity = 0
+	bac = (sensitivity + specificity)/2	
+		
 	print 'TP: %d, FP: %d, TN: %d, FN: %d' % (tp, fp, tn, fn)
 	print 'Precision: %.3f' % precision
 	print 'Recall: %.3f' % recall

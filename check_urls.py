@@ -44,10 +44,6 @@ def main():
 		else:
 			fn += 1
 	fp = len(surls) - tp
-	print 'writing hit urls to %s' % (srcfile+'.hit')
-	ofile = open(srcfile+'.hit', 'wb')
-	ofile.write('\n'.join(hit_urls))
-	ofile.close()
 	
 	precision = tp/(tp + fp)
 	recall = tp/(tp + fn)

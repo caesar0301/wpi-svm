@@ -201,14 +201,16 @@ def main():
 		elif input_folder is not None:
 			output_prefix = os.path.split(os.path.dirname(input_folder))[1]
 		##################################
-		ofile = open(output_prefix+'.instance', 'wb')
+		instance_file = output_prefix+'.instance'
+		ofile = open(instance_file, 'wb')
 		ofile.write(''.join(all_instances))
 		ofile.close()
 		##################################
-		# dump urls
+		# possible page urls
 		##################################
+		page_file = instance_file+'.page'
 		all_real_urls = [i.url for i in all_real_roots]
-		ofile = open(output_prefix+'.pageurl', 'wb')
+		ofile = open(page_file, 'wb')
 		ofile.write('\n'.join(all_real_urls))
 		ofile.close()
 		##################################
