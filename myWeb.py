@@ -6,6 +6,8 @@ import re, math, datetime, random
 import utilities
 import logbasic as basic
 
+feature_name_file = './conf/fnames'
+
 class WebObject(object):
 	""" Defining the class for web objects.
 	"""
@@ -21,6 +23,8 @@ class WebObject(object):
 		self.re_url = None
 		self.user_agent = None
 		self.user_ip = None
+		
+		self.pageid = None
 
 	def is_root(self):
 		""" Check if the object is a HTML file. 
@@ -47,16 +51,19 @@ class WebPage(object):
 		self.ref = None
 		self.urls = []
 		self.objs = []
+		self.junk_objs = []		# objects without referrer
 
-	def own_this(self, obj, rule = 's'):
+		self.isvalid = False
+
+	def own_this(self, obj, rule = 'strict'):
 		""" Checking if the obj belongs to this page.
 		obj: an object of :WebObject
 		"""
-		if rule == 's':
+		if rule == 'strict':
 			for url in self.urls:
 				if obj.referrer and utilities.remove_url_prefix(obj.referrer) == utilities.remove_url_prefix(url):
 					return True
-		elif rule == 'l':
+		elif rule == 'loose':
 			pure_url = re.compile(r'^(\w+://)?([^#\?]+)#?\??')
 			if obj.referrer:
 				match_ref = pure_url.match(obj.referrer)
@@ -78,14 +85,6 @@ class WebPage(object):
 				self.root = obj
 			self.urls.append(obj.url)
 			self.objs.append(obj)
-		
-	def is_valid(self):
-		""" Check if the page is valid
-		"""
-		if self.root != None and len(set(self.objs)) > 1:
-			return True
-		else:
-			return False
 			
 	def total_seconds(self):
 		all_objs = self.objs
@@ -120,7 +119,9 @@ class PageFeature(object):
 			<lable> <index1>:<value1> <index2>:<value2> ...
 		label: the label of this instance which can be any real number
 		"""
-		all_lines = open('./conf/fnames', 'rb').readlines()
+		global feature_name_file
+
+		all_lines = open(feature_name_file, 'rb').readlines()
 		attributes = []
 		for i in all_lines:
 			line_strip = i.strip(' \n\t\r')
@@ -148,6 +149,7 @@ class PageFeature(object):
 		referrer_type_is_flash = 0
 		referrer_type_is_javascript = 0
 		referrer_type_is_unidentified = 0
+		referrer_type_is_none = 0
 		if parent is not None:
 			subtype = self.__which_type(parent)
 			if subtype == 'image':
@@ -162,12 +164,31 @@ class PageFeature(object):
 				referrer_type_is_javascript = 1
 			else:
 				referrer_type_is_unidentified = 1
+		else:
+			# trick: define successive click ratio (SCR) as 
+			# 1 / number of pages in a click stream
+			# For train data was collected automatically
+			# which had this ratio as 1, so we 
+			# define this ratio manually as 1/3 to stay
+			# the same as test data.
+			if self.owner.isvalid:
+				if random.randint(0, 2) == 0:
+					referrer_type_is_none = 1
+				else:
+					referrer_type_is_html = 1
+			else:
+				referrer_type_is_none = 1
+			# pass
+
+			
+
 		self.f_dict['referrer_type_is_html'] = referrer_type_is_html
 		self.f_dict['referrer_type_is_image'] = referrer_type_is_image
 		self.f_dict['referrer_type_is_css'] = referrer_type_is_css
 		self.f_dict['referrer_type_is_flash'] = referrer_type_is_flash
 		self.f_dict['referrer_type_is_javascript'] = referrer_type_is_javascript
 		self.f_dict['referrer_type_is_unidentified'] = referrer_type_is_unidentified
+		self.f_dict['referrer_type_is_none'] = referrer_type_is_none
 
 	def __server_info(self):
 		""" Extracting featrues about server
@@ -208,9 +229,11 @@ class PageFeature(object):
 						if root_server == servername:
 							return True
 						else:
-							print 'Error to match domains: %s, %s' % (root_server, servername)
+							#print 'Error to match domains: %s, %s' % (root_server, servername)
+							pass
 				else:
-					print 'Error to match servername: %s' % root.url
+					#print 'Error to match servername: %s' % root.url
+					pass
 			return False
 			
 		origin_servers = set()
@@ -263,8 +286,9 @@ class PageFeature(object):
 			subtype = self.__which_type(obj)
 			type_obj_dict[subtype].append(obj)
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(all_objects)
+		(number, total_size, max_size, min_size, median_size, average_size, var_size, \
+							max_time, min_time, median_time, average_time, var_time) \
+							= self.__pro_subtype_objects(all_objects)
 		self.f_dict['dt_of_all_objects'] = self.owner.total_seconds()
 		self.f_dict['number_of_all_objects'] = number
 		self.f_dict['average_dt_of_one_object'] = self.f_dict['dt_of_all_objects']/self.f_dict['number_of_all_objects']
@@ -273,103 +297,142 @@ class PageFeature(object):
 		self.f_dict['all_size_min'] = min_size
 		self.f_dict['all_size_median'] = median_size
 		self.f_dict['all_size_average'] = average_size
+		self.f_dict['all_size_variance'] = var_size
 		self.f_dict['dt_of_all_max'] = max_time
 		self.f_dict['dt_of_all_min'] = min_time
 		self.f_dict['dt_of_all_median'] = median_time
 		self.f_dict['dt_of_all_average'] = average_time
+		self.f_dict['dt_of_all_variance'] = var_time
 		
 		cnt_of_all_objs = number
 		size_of_all_objs = total_size
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['others'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size, \
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['others'])
 		self.f_dict['number_of_unidentified_objects'] = number
 		self.f_dict['size_of_unidentified_objects'] = total_size
 		self.f_dict['size_of_unidentified_max'] = max_size
 		self.f_dict['size_of_unidentified_min'] = min_size
 		self.f_dict['size_of_unidentified_median'] = median_size
 		self.f_dict['size_of_unidentified_average'] = average_size
+		self.f_dict['size_of_unidentified_variance'] = var_size
 		self.f_dict['dt_of_unidentified_max'] = max_time
 		self.f_dict['dt_of_unidentified_min'] = min_time
 		self.f_dict['dt_of_unidentified_median'] = median_time
 		self.f_dict['dt_of_unidentified_average'] = average_time
+		self.f_dict['dt_of_unidentified_variance'] = var_time
 		self.f_dict['fraction_of_unidentified_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_unidentified_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['image'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size, \
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['image'])
 		self.f_dict['number_of_image_objects'] = number
 		self.f_dict['size_of_image_objects'] = total_size
 		self.f_dict['size_of_image_max'] = max_size
 		self.f_dict['size_of_image_min'] = min_size
 		self.f_dict['size_of_image_median'] = median_size
 		self.f_dict['size_of_image_average'] = average_size
+		self.f_dict['size_of_image_variance'] = var_size
 		self.f_dict['dt_of_image_max'] = max_time
 		self.f_dict['dt_of_image_min'] = min_time
 		self.f_dict['dt_of_image_median'] = median_time
 		self.f_dict['dt_of_image_average'] = average_time
+		self.f_dict['dt_of_image_variance'] = var_time
 		self.f_dict['fraction_of_image_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_image_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['flash'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size, \
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['flash'])
 		self.f_dict['number_of_flash_objects'] = number
 		self.f_dict['size_of_flash_objects'] = total_size
 		self.f_dict['size_of_flash_max'] = max_size
 		self.f_dict['size_of_flash_min'] = min_size
 		self.f_dict['size_of_flash_median'] = median_size
 		self.f_dict['size_of_flash_average'] = average_size
+		self.f_dict['size_of_flash_variance'] = var_size
 		self.f_dict['dt_of_flash_max'] = max_time
 		self.f_dict['dt_of_flash_min'] = min_time
 		self.f_dict['dt_of_flash_median'] = median_time
 		self.f_dict['dt_of_flash_average'] = average_time
+		self.f_dict['dt_of_flash_variance'] = var_time
 		self.f_dict['fraction_of_flash_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_flash_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['css'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size, \
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['css'])
 		self.f_dict['number_of_css_objects'] = number
 		self.f_dict['size_of_css_objects'] = total_size
 		self.f_dict['size_of_css_max'] = max_size
 		self.f_dict['size_of_css_min'] = min_size
 		self.f_dict['size_of_css_median'] = median_size
 		self.f_dict['size_of_css_average'] = average_size
+		self.f_dict['size_of_css_variance'] = var_size
 		self.f_dict['dt_of_css_max'] = max_time
 		self.f_dict['dt_of_css_min'] = min_time
 		self.f_dict['dt_of_css_median'] = median_time
 		self.f_dict['dt_of_css_average'] = average_time
+		self.f_dict['dt_of_css_variance'] = var_time
 		self.f_dict['fraction_of_css_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_css_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['js'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size,\
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['js'])
 		self.f_dict['number_of_javascript_objects'] = number
 		self.f_dict['size_of_javascript_objects'] = total_size
 		self.f_dict['size_of_javascript_max'] = max_size
 		self.f_dict['size_of_javascript_min'] = min_size
 		self.f_dict['size_of_javascript_median'] = median_size
 		self.f_dict['size_of_javascript_average'] = average_size
+		self.f_dict['size_of_javascript_variance'] = var_size
 		self.f_dict['dt_of_javascript_max'] = max_time
 		self.f_dict['dt_of_javascript_min'] = min_time
 		self.f_dict['dt_of_javascript_median'] = median_time
 		self.f_dict['dt_of_javascript_average'] = average_time
+		self.f_dict['dt_of_javascript_variance'] = var_time
 		self.f_dict['fraction_of_javascript_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_javascript_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 		
-		(number, total_size, max_size, min_size, median_size, average_size, max_time, min_time, median_time, average_time) \
-			= self.__pro_subtype_objects(type_obj_dict['html'])
+		(number, total_size, max_size, min_size, median_size, average_size, var_size,\
+								max_time, min_time, median_time, average_time, var_time) \
+								= self.__pro_subtype_objects(type_obj_dict['html'])
 		self.f_dict['number_of_html_objects'] = number
 		self.f_dict['size_of_html_objects'] = total_size
 		self.f_dict['size_of_html_max'] = max_size
 		self.f_dict['size_of_html_min'] = min_size
 		self.f_dict['size_of_html_median'] = median_size
 		self.f_dict['size_of_html_average'] = average_size
+		self.f_dict['size_of_html_variance'] = var_size
 		self.f_dict['dt_of_html_max'] = max_time
 		self.f_dict['dt_of_html_min'] = min_time
 		self.f_dict['dt_of_html_median'] = median_time
 		self.f_dict['dt_of_html_average'] = average_time
+		self.f_dict['dt_of_html_variance'] = var_time
 		self.f_dict['fraction_of_html_number'] = float(number)/cnt_of_all_objs
 		self.f_dict['fraction_of_html_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
+
+
+		(number, total_size, max_size, min_size, median_size, average_size, var_size,\
+								max_time, min_time, median_time, average_time, var_time) \
+		= self.__pro_subtype_objects(self.owner.junk_objs)
+		self.f_dict['number_of_junk_objects'] = number
+		self.f_dict['size_of_junk_objects'] = total_size
+		self.f_dict['size_of_junk_max'] = max_size
+		self.f_dict['size_of_junk_min'] = min_size
+		self.f_dict['size_of_junk_median'] = median_size
+		self.f_dict['size_of_junk_average'] = average_size
+		self.f_dict['size_of_junk_variance'] = var_size
+		self.f_dict['dt_of_junk_max'] = max_time
+		self.f_dict['dt_of_junk_min'] = min_time
+		self.f_dict['dt_of_junk_median'] = median_time
+		self.f_dict['dt_of_junk_average'] = average_time
+		self.f_dict['dt_of_junk_variance'] = var_time
+		self.f_dict['ratio_of_junk_number'] = float(number)/cnt_of_all_objs
+		self.f_dict['ratio_of_junk_size'] = size_of_all_objs != 0 and float(total_size)/size_of_all_objs or 0
 
 	def __pro_subtype_objects(self, obj_list):
 		""" Processing objects of subtype.
@@ -388,6 +451,10 @@ class PageFeature(object):
 		def average(numbers):
 			return math.fsum(numbers)/len(numbers)
 
+		def variance(numbers):
+			ave = average(numbers)
+			return len(numbers) > 1 and (math.fsum([math.pow(i-ave, 2) for i in numbers]) / len(numbers)-1) or 0.0
+
 		count = len(obj_list)
 		sizes = [i.size for i in obj_list if i.size >= 0]
 		timings = [i.receiving_time for i in obj_list if i.receiving_time >= 0]
@@ -396,24 +463,29 @@ class PageFeature(object):
 			min_size = 0
 			med_size = 0
 			ave_size = 0
+			var_size = 0
 			total_size = 0
 		else:
 			max_size = max(sizes)
 			min_size = min(sizes)
 			med_size = median(sizes)
 			ave_size = average(sizes)
+			var_size = variance(sizes)
 			total_size = sum(sizes)
 		if len(timings) == 0:
 			max_time = 0
 			min_time = 0
 			med_time = 0
 			ave_time = 0
+			var_time = 0
 		else:
 			max_time = max(timings)
 			min_time = min(timings)
 			med_time = median(timings)
 			ave_time = average(timings)
-		return (count, total_size, max_size, min_size, med_size, ave_size, max_time, min_time, med_time, ave_time)
+			var_time = variance(timings)
+		return (count, total_size, max_size, min_size, med_size, ave_size, var_size, \
+									max_time, min_time, med_time, ave_time, var_time)
 		
 def main():
 	all_lines = open('./conf/fnames', 'rb').readlines()

@@ -1,17 +1,22 @@
 # coding: utf-8
-from myTree import Tree, Node
+
+from myWeb import WebObject
+import tree.node as mod_node
+import tree.tree as mod_tree
+
+import uuid
 import utilities
 import logbasic
 import datetime
 
-def get_value(dict, key):
-	try:
-		value = dict[key]
-		if value == 'N/A':
-			raise KeyError
-	except KeyError:
-		value = None
-	return value
+
+class Node(mod_node.Node, WebObject):
+	"""docstring for WebNode"""
+	def __init__(self):
+		nid = str(uuid.uuid1())
+		mod_node.Node.__init__(self, 'nd_'+nid, nid)
+		WebObject.__init__(self)
+
 
 class SubGraph(object):
 	def __init__(self, ip):
@@ -26,6 +31,16 @@ class SubGraph(object):
 
 class NewTreeNeeded(Exception):
 	pass
+
+
+def get_value(dict, key):
+	try:
+		value = dict[key]
+		if value == 'N/A':
+			raise KeyError
+	except KeyError:
+		value = None
+	return value
 	
 def create_node_from_rr(rr):
 	new_node = Node()
@@ -51,11 +66,13 @@ def create_node_from_rr(rr):
 	new_node.re_url = get_value(rr, 'redirect_url')
 	new_node.user_agent = get_value(rr, 'user_agent_id')
 	new_node.referrer = get_value(rr, 'referrer')
+
 	return new_node
 	
 class Graph(object):
 	def __init__(self):
 		self.subgraphs = []
+		self.junk_nodes = []
 
 	def get_subgraph(self, ip):
 		for sg in self.subgraphs:
@@ -63,58 +80,6 @@ class Graph(object):
 				return sg
 		return None
 
-	def add_node(self, node):
-		# Search for corresponding subgraph
-		if node.user_ip is None:
-			print 'Source IP is lost in request/response pair.'
-			exit(-1)
-		subgraph = self.get_subgraph(node.user_ip)
-		if subgraph == None:
-			subgraph = SubGraph(node.user_ip)
-			self.subgraphs.append(subgraph)
-		try:
-			# Start linking
-			linked_flag = False
-			if node.user_agent and node.user_agent in subgraph.ua_trees_d.keys():
-				for tree in subgraph.ua_trees_d[node.user_agent][::-1]:
-					if node.start_time - tree[tree.root].start_time <= datetime.timedelta(minutes = 30):
-						# Find its predecessor in the past 30 mins...
-						predecessor = None
-						# try with referrer...
-						if node.referrer:
-							if utilities.search_url(node.referrer, tree.ref_node_d.keys()):
-								predecessor = tree.ref_node_d[node.referrer]
-							elif utilities.search_url(node.referrer, tree.url_node_d.keys()):
-								# Referrer, last chance...
-								predecessor = tree.url_node_d[node.referrer]
-								tree.ref_node_d[node.referrer] = predecessor
-								# Add this node to the tree or continue to search.	
-						if predecessor:
-							# Predecessor found...
-							tree.add_node(node, predecessor)
-							tree.url_node_d[node.url] = node.identifier
-							linked_flag = True
-							break
-					else:	break
-				# After all the trees are checked:	
-				if not linked_flag:
-					raise NewTreeNeeded	
-			elif node.user_agent is not None:
-					# new user agent index and new tree
-					raise NewTreeNeeded
-		except NewTreeNeeded:
-			if node.is_root():
-				new_tree = Tree()
-				new_tree.add_node(node, None)
-				new_tree.url_node_d[node.url] = node.identifier
-				new_tree.ref_node_d[node.url] = node.identifier
-				linked_flag = True
-				# Update the graph
-				try:
-					subgraph.ua_trees_d[node.user_agent].append(new_tree)
-				except:
-					subgraph.ua_trees_d[node.user_agent] = [new_tree]
-					
 	def all_trees(self):
 		all_trees = []
 		for sg in self.subgraphs:
@@ -122,3 +87,62 @@ class Graph(object):
 				trees = sg.ua_trees_d[key]
 			all_trees += trees
 		return all_trees
+
+	def add_node(self, new_node):
+		# Search for corresponding subgraph
+		if new_node.user_ip is None:
+			print 'Source IP is lost in request/response pair.'
+			exit(-1)
+
+		subgraph = self.get_subgraph(new_node.user_ip)
+		if subgraph == None:
+			subgraph = SubGraph(new_node.user_ip)
+			self.subgraphs.append(subgraph)
+
+		try:
+			# Start linking
+			if new_node.user_agent is not None:
+				if new_node.user_agent in subgraph.ua_trees_d.keys():
+				
+					linked_flag = False
+					for tree in subgraph.ua_trees_d[new_node.user_agent][::-1]:
+						if new_node.start_time - tree[tree.root].start_time \
+											<= datetime.timedelta(minutes = 30):
+							# Find its predecessor in the past xx mins...
+							pred_id = None
+							tree.nodes.sort(lambda x,y: cmp(x.start_time, y.start_time), None, False)
+
+							if new_node.referrer:
+								for item in tree.nodes[::-1]:
+									if utilities.cmp_url(new_node.referrer, item.url, 'loose'):
+										# refer to 'utilities.py' for details about 'loose' parameter
+										pred_id = item.identifier
+										break
+							if pred_id:
+								# Predecessor found...
+								tree.add_node(new_node, pred_id)
+								linked_flag = True
+								break
+						else:
+							break
+
+					# After all the trees are checked:	
+					if not linked_flag:
+						raise NewTreeNeeded
+				else:
+					# new user agent index and new tree
+					raise NewTreeNeeded
+
+		except NewTreeNeeded:
+			if new_node.is_root():
+				if new_node.status == 200:
+					new_tree = mod_tree.Tree()
+					new_tree.add_node(new_node, None)
+					linked_flag = True
+					# Update the graph
+					try:
+						subgraph.ua_trees_d[new_node.user_agent].append(new_tree)
+					except:
+						subgraph.ua_trees_d[new_node.user_agent] = [new_tree]
+			else:
+				self.junk_nodes.append(new_node)

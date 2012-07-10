@@ -23,11 +23,11 @@ if not is_win32:
 	gnuplot_exe = "/usr/local/bin/gnuplot"
 else:
         # example for windows
-	svmscale_exe = r"..\windows\svm-scale.exe"
-	svmtrain_exe = r"..\windows\svm-train.exe"
-	svmpredict_exe = r"..\windows\svm-predict.exe"
-	gnuplot_exe = r"C:\Program Files (x86)\gnuplot\bin\pgnuplot.exe"
-	grid_py = r".\grid.py"
+	svmscale_exe = r"..\\windows\\svm-scale.exe"
+	svmtrain_exe = r"..\\windows\\svm-train.exe"
+	svmpredict_exe = r"..\\windows\\svm-predict.exe"
+	gnuplot_exe = r"C:\\Program Files (x86)\\gnuplot\\bin\\pgnuplot.exe"
+	grid_py = r".\\grid.py"
 
 assert os.path.exists(svmscale_exe),"svm-scale executable not found"
 assert os.path.exists(svmtrain_exe),"svm-train executable not found"
@@ -73,7 +73,7 @@ c,g,rate = map(float,last_line.split())
 
 print('Best c={0}, g={1} CV rate={2}'.format(c,g,rate))
 
-cmd = '{0} -c {1} -g {2} {3} "{4}" "{5}"'.format(svmtrain_exe,c,g, train_options_string, scaled_file,model_file)
+cmd = '{0} -c {1} -g {2} {3} "{4}" "{5}"'.format(svmtrain_exe,c,g, train_options_string, scaled_file, model_file)
 print('Training...')
 Popen(cmd, shell = True, stdout = PIPE).communicate()
 

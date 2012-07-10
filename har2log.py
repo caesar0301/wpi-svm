@@ -3,29 +3,7 @@
 import json, argparse, os, codecs, re, uuid
 import logbasic as basic
 
-def parse_time(timestr):
-	timere = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3,6})\+')
-	match = timere.match(timestr)
-	if match:
-		return match.group(1)
-	else:
-		return None	
-		
-def parse_field(dict, key):
-	""" Simple dict wrapper
-	dict: name of dict object
-	key: name of key
-	Return: dict[key] or None
-	"""
-	invalid_values = ['', -1]
-	try:
-		value = dict[key]
-		if value in invalid_values:
-			raise KeyError
-	except KeyError:
-		value = None
-	return value
-	
+
 class RRPair(object):
 	def __init__(self):
 		self.sdt = None
@@ -52,11 +30,39 @@ class RRPair(object):
 		self.response_header_size = None
 		self.response_body_size = None
 		self.type = None
+
+
+
+def parse_time(timestr):
+	timere = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3,6})\+')
+	match = timere.match(timestr)
+	if match:
+		return match.group(1)
+	else:
+		return None	
+		
+def parse_field(dict, key):
+	""" Simple dict wrapper
+	dict: name of dict object
+	key: name of key
+	Return: dict[key] or None
+	"""
+	invalid_values = ['', -1]
+	try:
+		value = dict[key]
+		if value in invalid_values:
+			raise KeyError
+	except KeyError:
+		value = None
+	return value
+
+
 	
 def process_har(readfile, ua_id):
 	log = json.load(codecs.open(readfile, 'rb', 'utf-8', 'replace'))['log']
 	entries = log['entries']
 	objects = []
+
 	for har_ent in entries:
 		rr = RRPair()
 		# Parsing
@@ -105,7 +111,9 @@ def process_har(readfile, ua_id):
 			rr.uaid = ua_id[ua]
 		else:
 			rr.uaid = ua_id[ua]
+
 		objects.append(rr)
+
 	return objects
 		
 			
@@ -116,16 +124,34 @@ def main():
 	args = parser.parse_args()
 	input_file = args.input
 	input_folder = args.dir
+
 	if input_file is None and input_folder is None:
 		parser.print_help()
 		exit(1)
 	else:
 		all_objects = []
 		ua_id_d = {}
+
 		print 'processing hars...'
 		if input_file is not None:
+			dumpfile  = input_file+'.log'
+			uafile = dumpfile+'.ua'
+			if os.path.exists(dumpfile):
+				os.remove(dumpfile)
+			if os.path.exists(uafile):
+				os.remove(uafile)
+
 			all_objects += process_har(input_file, ua_id_d)
+
 		elif input_folder is not None:
+			foldername = os.path.split(input_folder.rstrip('/\\'))[1]
+			dumpfile  = foldername+'.log'
+			uafile = dumpfile+'.ua'
+			if os.path.exists(dumpfile):
+				os.remove(dumpfile)
+			if os.path.exists(uafile):
+				os.remove(uafile)
+
 			# Processing all HAR file under the folder
 			for root, dirs, files in os.walk(input_folder):
 				for file in files:
@@ -133,22 +159,21 @@ def main():
 					if suffix != 'har':
 						continue
 					all_objects += process_har(os.path.join(root, file), ua_id_d)
-		print 'sorting...'
 		all_objects.sort(lambda x,y: cmp(x.sdt, y.sdt), None, False)
-		
-		if input_file is not None:
-			output_prefix = input_file
-		elif input_folder is not None:
-			output_prefix = os.path.split(os.path.dirname(input_folder))[1]
+
 		# Dumping useragents
-		outfile = open(output_prefix+'.uaid', 'ab')
+		outfile = open(uafile, 'wb')
+		lines = []
 		for item in ua_id_d.items():
-			outfile.write(item[1]+'\t\t'+item[0])
+			lines.append(item[1]+'\t\t'+item[0])
+		outfile.write('\n'.join(lines))
+		outfile.flush()
 		outfile.close()
+
 		# Dumping rrpair
 		for rr in all_objects:
 			# Write
-			basic.write(output_prefix+'.log', 
+			basic.write(dumpfile, 
 				time = rr.sdt,
 				dns = rr.dns,
 				connect = rr.connect,
@@ -173,8 +198,9 @@ def main():
 				response_header_size = rr.response_header_size,
 				response_body_size = rr.response_body_size,
 				response_content_type = rr.type)
-		print 'writing useragent to file "%s"' % (output_prefix+'.uaid')
-		print 'writing log to file "%s"' % (output_prefix+'.log')
+			
+		print 'writing useragent to file "%s"' % uafile
+		print 'writing log to file "%s"' % dumpfile
 
 			
 if __name__ == '__main__':

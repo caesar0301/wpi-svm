@@ -45,3 +45,5 @@ pip-log.txt
 *.pageurl
 data/*
 *.tmp
+*.har
+*.txt

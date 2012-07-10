@@ -12,47 +12,25 @@ from os import system
 from os import unlink
 from subprocess import *
 
-##### Path Setting #####
-
-is_win32 = (sys.platform == 'win32')
-if not is_win32:
-	gridpy_exe = "./grid.py -log2c -2,9,2 -log2g 1,-11,-2"
-	svmtrain_exe="../svm-train"
-	svmpredict_exe="../svm-predict"
-else:
-	gridpy_exe = r".\grid.py -log2c -2,9,2 -log2g 1,-11,-2"
-	svmtrain_exe=r"..\windows\svmtrain.exe"
-	svmpredict_exe=r"..\windows\svmpredict.exe"
-
 ##### Global Variables #####
 
 train_pathfile=""
 train_file=""
-test_pathfile=""
-test_file=""
-if_predict_all=0
 
 whole_fsc_dict={}
 whole_imp_v=[]
 
 
 def arg_process():
-	global train_pathfile, test_pathfile
-	global train_file, test_file
-	global svmtrain_exe, svmpredict_exe
-
+	global train_pathfile
+	global train_file
 	if len(sys.argv) not in [2,3]:
-		print('Usage: %s training_file [testing_file]' % sys.argv[0])
+		print('Usage: %s instance_file' % sys.argv[0])
 		raise SystemExit
 
 	train_pathfile=sys.argv[1]
-	assert os.path.exists(train_pathfile),"training file not found"
+	assert os.path.exists(train_pathfile),"instance file not found"
 	train_file = os.path.split(train_pathfile)[1]
-
-	if len(sys.argv) == 3:
-		test_pathfile=sys.argv[2]
-		assert os.path.exists(test_pathfile),"testing file not found"
-		test_file = os.path.split(test_pathfile)[1]
 
 
 ##### Decide sizes of selected feautures #####
@@ -282,163 +260,6 @@ def main():
 	fd.close()
 
 
-	### decide sizes of features to try
-	fnum_v = feat_num_try(f_tuples) #ex: [50,25,12,6,3,1]
-	for i in range(len(fnum_v)):
-		accuracy.append([])
-	writelog("try feature sizes: %s\n\n"%(fnum_v))
-
-
-	writelog("%#Feat\test. acc.\n")
-
-	est_acc=[]
-	#for each possible feature subset
-	for j in range(len(fnum_v)):
-
-		fn = fnum_v[j]  # fn is the number of features selected
-		fv = whole_imp_v[:fn] # fv is indices of selected features
-
-		t=time()
-		#pick features
-		tr_sel_samp = select(train_sample, fv)
-		tr_sel_name = train_file+".tr"
-		t=time()-t
-		writelog("\n   feature num: %d\n"%fn, VERBOSE_ITER)
-		writelog("      pick time: %.1f\n"%t, VERBOSE_TIME)
-
-		t=time()
-		writedata(tr_sel_samp,train_label,tr_sel_name)
-		t=time()-t
-		writelog("      write data time: %.1f\n"%t, VERBOSE_TIME)
-
-
-		t=time()
-		# choose best c, gamma from splitted training sample
-		c,g, cv_acc = train_svm(tr_sel_name)
-		t=time()-t
-		writelog("      choosing c,g time: %.1f\n"%t, VERBOSE_GRID_TIME)
-
-		est_acc.append(cv_acc)
-		writelog("%d:\t%.5f\n"%(fnum_v[j],cv_acc) )
-
-	print(fnum_v)
-	print(est_acc)
-
-	fnum=fnum_v[est_acc.index(max(est_acc))]
-#	print(est_acc.index(max(est_acc)))
-	print('Number of selected features %s' % fnum)
-	print('Please see %s.select for details' % train_file)
-
-	#result for features selected
-	sel_fv = whole_imp_v[:fnum]
-
-	writelog("max validation accuarcy: %.6f\n"%max(est_acc))
-	writelog("\nselect features: %s\n"%sel_fv)
-	writelog("%s features\n"%fnum)
-		
-
-	# REMOVE INTERMEDIATE TEMPORARY FILE: training file after selection
-	rem_file(tr_sel_name)
-	rem_file("%s.out"%tr_sel_name)
-	rem_file("%s.png"%tr_sel_name)
-
-
-	### do testing 
-
-	test_label=None
-	test_sample=None
-	if test_pathfile != "":
-		print("reading testing data....")
-		test_label, test_sample, max_index = readdata(test_pathfile)
-		writelog("\nloading testing data '%s'\n"%test_pathfile)
-		print("read done")
-		
-		#picking features
-		train_sel_samp = select(train_sample, sel_fv)
-		test_sel_samp = select(test_sample, sel_fv)
-
-		#grid search
-		train_sel_name = "%s.%d"%(train_file,fnum)
-		writedata(train_sel_samp,train_label,train_sel_name)
-		c,g, cv_acc = train_svm(train_sel_name)
-		writelog("best (c,g)= %s, cv-acc = %.6f\n"%([c,g],cv_acc))
-
-		# REMOVE INTERMEDIATE TEMPORARY FILE: training file after selection
-		rem_file(train_sel_name)
-
-
-		### predict
-		pred_y = predict(train_label, train_sel_samp, c, g, test_label, test_sel_samp, 0, "%s.model"%train_sel_name)
-
-		#calculate accuracy
-		acc = cal_acc(pred_y, test_label)
-		##acc = cal_bacc(pred_y, test_label)
-		writelog("testing accuracy = %.6f\n"%acc)
-
-		#writing predict labels
-		out_name = "%s.%d.pred"%(test_file,fnum)
-		fd = open(out_name, 'w')
-		for y in pred_y: fd.write("%f\n"%y)
-		fd.close()
-		
-
-### predict all possible sets ###
-def predict_all():
-
-	global train_pathfile, train_file
-	global test_pathfile, test_file
-
-	global whole_fsc_dict,whole_imp_v
-
-	train_label, train_sample, max_index = readdata(train_pathfile)
-	test_label, test_sample, m = readdata(test_pathfile)
-
-	random_shuffle(train_label, train_sample)
-
-	###whole_fsc_dict, ordered_feats = cal_feat_imp(train_label,train_sample)
-	ordered_feats = whole_imp_v
-	f_tuples = whole_fsc_dict.items()
-	f_tuples.sort(key = value_cmpf)
-
-	fnum_v = feat_num_try(f_tuples) #ex: [50,25,12,6,3,1]
-
-	writelog("\nTest All %s\n"%fnum_v)
-	for fnum in fnum_v:
-		sel_fv = ordered_feats[:fnum]
-
-		#picking features
-		train_sel_samp = select(train_sample, sel_fv)
-		test_sel_samp = select(test_sample, sel_fv)
-
-		#grid search
-		train_sel_name = "%s.%d"%(train_file,fnum)
-		writedata(train_sel_samp,train_label,train_sel_name)
-		c,g, cv_acc = train_svm(train_sel_name)
-		writelog("best (c,g)= %s, cv-acc = %.6f\n"%([c,g],cv_acc))
-
-		# REMOVE INTERMEDIATE TEMPORARY FILE: training file after selection
-		rem_file(train_sel_name)
-
-		#predict
-		pred_y = predict(train_label, train_sel_samp, c, g, test_label, test_sel_samp)
-
-		#calculate accuracy
-		acc = cal_acc(pred_y, test_label)
-		##acc = cal_bacc(pred_y, test_label)
-		writelog("feat# %d, testing accuracy = %.6f\n"%(fnum,acc))
-
-		#writing predict labels
-		out_name = "%s.%d.pred"%(test_file,fnum)
-		fd = open(out_name, 'w')
-		for y in pred_y: fd.write("%f\n"%y)
-		fd.close()
-
-		del_out_png = 0
-		if del_out_png:
-			rem_file("%s.out"%train_sel_name)
-			rem_file("%s.png"%train_sel_name)
-
-
 ###return a dict containing F_j
 def cal_Fscore(labels,samples):
 
@@ -549,17 +370,6 @@ def writedata(samples,labels,filename):
 	fp.flush()
 	fp.close()
 
-
-###### PROGRAM ENTRY POINT ######
-
-arg_process()
-
-initlog("%s.select"%train_file)
-writelog("start: %s\n\n"%datetime.now())
-main()
-
-# do testing on all possible feature sets
-if if_predict_all :
-	predict_all()
-
-writelog("\nend: \n%s\n"%datetime.now())
+if __name__ == '__main__':
+	arg_process()
+	main()

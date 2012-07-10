@@ -1,7 +1,6 @@
 #coding: utf-8
-# This program extracts features as the input of LIBSVM from HAR file 
+# This program extracts real page urls of HAR files
 # Author: chenxm
-
 
 import json, re, math, argparse
 import os, uuid, random, datetime
@@ -78,11 +77,10 @@ class MyPage(WebPage):
 		WebPage.__init__(self)
 		if id is None:
 			id = uuid.uuid4().hex
-
 		self.id = id
 
 
-def process_har_file(input, urls):
+def process_har_file(input):
 	# Open HAR file
 	ifile = open(input, 'rb')
 	uni_str = unicode(ifile.read(), 'utf-8', 'replace')
@@ -113,7 +111,6 @@ def process_har_file(input, urls):
 				if new_node.referrer:
 					for item in tree.nodes[::-1]:
 						if utilities.cmp_url(new_node.referrer, item.url, 'loose'):
-							# refer to 'utilities.py' for details about 'loose' parameter
 							pred_id = item.identifier
 							break
 				if pred_id:
@@ -134,6 +131,8 @@ def process_har_file(input, urls):
 					trees.append(new_tree)
 			else:
 				junk_nodes.append(new_node)
+
+	# Sort trees in the order of ascending time
 	trees.sort(lambda x,y: cmp(x,y), lambda x: x[x.root].start_time, False)
 
 	# little trick: treat a tree with one node as the invalid
@@ -147,104 +146,80 @@ def process_har_file(input, urls):
 
 	#log('{0} {1} {2}'.format(tot, len(junk_nodes), input))
 
-	# Find page candidates from valid trees:
-	# If the url of page candidate exsits in the groundtruth file,
-	# it's considered to be valid.
-	pages = []
+	# find real page(s) from valid trees.
+	real_pages = []
+	last = None
 	for tree in valid_trees:
-		candids = [o.identifier for o in tree.nodes if o.is_root() and o.status==200]
+		# one tree -> one page
+		new_page = MyPage()					# Treat the tree with more than
+											# one nodes as a valid tree
+		new_page.root = tree[tree.root]
+		new_page.objs = tree.nodes
+		real_pages.append(new_page)
+		last = tree
 
-		for id in candids:
-			nodeids = [i for i in tree.expand_tree(id, filter = lambda x: x not in candids) if i not in candids]
-
-			if len(nodeids) > 0:
-				# little trick: do not cut the tree with only one node
-				new_page = MyPage()
-				new_page.add_obj(tree[id], True)
-				pages.append(new_page)
-				for node in nodeids:
-					new_page.add_obj(tree[node])
-
-				if utilities.search_url(new_page.root.url, urls) is True:
-					new_page.isvalid = True
-				if tree[id].bpointer is not None:
-					new_page.ref = tree[tree[id].bpointer]
-	pages.sort(lambda x,y: cmp(x,y), lambda x: x.root.start_time, False)
-
-	junk2 = len(junk_nodes)
 	# Options: process junk web objects:
-	# Add the each object to the nearest valid
-	# web page.
-	
+	# Add the each object to the nearest
+	# web page of 'real_pages'
+	junk2 = 0
 	for node in junk_nodes:
 		found_flag = False
-		for page in pages[::-1]:
+		for page in real_pages[::-1]:
 			if cmp(page.root.start_time, node.start_time) < 0:
 				found_flag = True
 				break
 		if found_flag:
-			page.junk_objs.append(node)
-			junk2 -= 1
+			page.objs.append(node)
+		else:
+			junk2 += 1
 
-	log('{0} {1} {2} {3}'.format(len(valid_trees), len(pages), junk2, input))
+	log('{0} {1} {2} {3}'.format(len(real_pages), tot, junk2, input))
 
-	return pages
+	return real_pages
+
 
 
 def main():
-	global log_file
-	if os.path.exists(log_file):
-		os.remove(log_file)
-		
-	parser = argparse.ArgumentParser(description='This program extracts features \
-												as the input of LIBSVM from HAR file ')
+	parser = argparse.ArgumentParser(description='This program extracts real page \
+												urls of HAR files as groundtruth.')
 	parser.add_argument('harfolder', type=str, help= 'file folder containing HAR \
 												file(s). All the HAR files under \
 												this folder will be processed.')
-	parser.add_argument('pagefile', type=str, help= 'File containing valid page urls.')
 
 	args = parser.parse_args()
 	harfolder = args.harfolder
 	foldername = os.path.split(harfolder.rstrip('/\\'))[1]
-	dumpfile = foldername+'.instance'
-	
-	# Read gt urls from 'gt' parameter.
-	gtfile = args.pagefile
-	gturls = [i for i in open(gtfile, 'rb') if i.strip('\r\n') != '']
+	dumpfile = foldername+'.page'
+
+	global log_file
+	if os.path.exists(log_file):
+		os.remove(log_file)
 
 	# Processing all HAR file under the folder
-	all_pages = []
+	all_real_pages = []
 	for root, dirs, files in os.walk(harfolder):
-		for file in files[:]:
+		for file in files:
 			suffix = file.rsplit('.', 1)[1]
 			if suffix != 'har':
 				continue
-			all_pages += process_har_file(os.path.join(root, file), gturls)
-	all_pages.sort(lambda x,y: cmp(x,y), lambda x: x.root.start_time, False)
-	log('Pages:%d' % len(all_pages))
 
-	# dump LIBSVM instances
-	all_instances = []
-	inst_pos = 0
-	inst_neg = 0
-	for pc in all_pages:
-		if pc.isvalid:
-			log('{0} {1}'.format(pc.root.url, len(pc.objs)))
-			label = 1
-			inst_pos += 1
-		else:
-			label = -1
-			inst_neg += 1
+			all_real_pages += process_har_file(os.path.join(root, file))[0:1]
+			# little trick: with foreknowledge, the first page is the real page
+			# so we obtain the first one and drop the others as invalid ones. 
 
-		pf = PageFeature(pc)
-		all_instances.append(pf.assemble_instance(label))
-
-	log('pos#: {0}, neg#: {1}'.format(inst_pos, inst_neg))
-	log('write to file "{0}"'.format(dumpfile))
-	
 	# Write to file
-	ofile = open(dumpfile, 'wb')
-	ofile.write(''.join(all_instances))
+	if os.path.exists(dumpfile):
+		os.remove(dumpfile)
+	ofile = open(dumpfile, 'ab')
+	
+	i = 0
+	for p in all_real_pages:
+		if p.root:
+			i += 1
+			ofile.write(p.root.url+'\n')
+
+	print('write {0} real pages to: {1}'.format(i, dumpfile))
+	ofile.flush()
 	ofile.close()
 
 

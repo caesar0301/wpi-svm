@@ -1,6 +1,8 @@
-# Python 3 Tree Implementation
+# Python 2/3 Tree Implementation
 #
-# Copyright (C) 2011, Brett Alistair Kromkamp - brettkromkamp@gmail.com
+# Copyright (C) 2011
+# Original: Brett Alistair Kromkamp - brettkromkamp@gmail.com
+# Edited by: Xiaming Chen - chenxm35@gmail.com
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -27,7 +29,6 @@
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 import unittest
 import uuid
 

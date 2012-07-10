@@ -2,14 +2,25 @@
 # This program extarcts features as input of LIBSVM from log file of web-logger:
 # 	git@github.com:caesar0301/web-logger.git
 # Author: chenxm, 2012-05-21
-import json, re
-import hashlib
-import argparse
+import json, re, sys, os
+import hashlib, argparse
 
 from myWeb import WebPage, PageFeature
 import logbasic as basic
 from myGraph import *
 import utilities
+
+log_file = sys.argv[0].replace('.', '_')+'.log'
+
+def log(line):
+    global log_file
+
+    print line
+    log_h = open(log_file, 'ab')
+    log_h.write(line+'\n')
+    log_h.flush()
+    log_h.close()
+
 			
 def get_value(dict, key):
 	try:
@@ -19,116 +30,135 @@ def get_value(dict, key):
 	except KeyError:
 		value = None
 	return value
-	
-def process_tree(tree):
-	t_refs = tree.ref_node_d.values()	# We choose all the referred nodes as main object candidates
-	main_obj_cands = []
-	for i in t_refs:
-		if tree[i].is_root():
-			main_obj_cands.append(tree[i])
-	pages = []
-	if len(main_obj_cands) > 0:
-		main_obj_cands.sort(lambda x,y: cmp(x,y), lambda x: x.start_time, False)	# ordered by +time
-		cand_ids = [i.identifier for i in main_obj_cands]
-		# Find final page roots
-		roots = []
-		for cand in main_obj_cands:
-			cand_pred_id = cand.bpointer
-			cand_pred = None
-			if cand_pred_id is not None:
-				cand_pred = tree[cand_pred_id]
-			roots.append((cand, cand_pred))
-		rootids = [i[0].identifier for i in roots]
-		for root in roots:
-			new_page = WebPage()
-			new_page.root = root[0]
-			new_page.ref = root[1]
-			new_page.add_obj(root[0], True)
-			pages.append(new_page)
-			for nodeid in tree.expand_tree(root[0].identifier, filter = lambda x: x not in rootids):
-				new_page.add_obj(tree[nodeid])
-	return pages
+
+
+class MyPage(WebPage):
+	def __init__(self, id = None):
+		WebPage.__init__(self)
+		if id is None:
+			id = uuid.uuid4().hex
+
+		self.id = id
+		self.isvalid = False
+
 					
 def process_log(logfile, gt_urls):
-	""" Processing log file
-	logfile: name of logfile
-	gt_urls: name of file storing valid urls to deduce the labels of instances
-	outfile: name of output file
-	"""
-	valid_urls = open(gt_urls, 'rb').read().split('\n')
-	print 'reading log...'
-	all_rr = basic.read(logfile)
+	valid_urls = [i.strip('\r\n') for i in open(gt_urls, 'rb')]
 	
-	print 'processing rrp...'
+	###### preprocess log
+	print 'Reading log...'
+	all_rr = basic.read(logfile)
 	all_nodes = []
 	for rr in all_rr:
 		all_nodes.append(create_node_from_rr(rr))
 	all_nodes.sort(lambda x,y: cmp(x,y), lambda x: x.start_time, False)
 		
+	###### construct link trees
+
+	print 'Creating graph...'
 	new_graph = Graph()
-	print 'processing nodes...'
 	for node in all_nodes:
 		new_graph.add_node(node)
-	print 'graph ready...'
-	print 'finding pages...'
-	all_trees = new_graph.all_trees()
-	print 'Trees:', len(all_trees)
+	trees = new_graph.all_trees()
+	junk_nodes = new_graph.junk_nodes
+	# little trick: treat a tree with one node 
+	# as the invalid and add its nodes to 'junk_nodes'
+	valid_trees = []
+	for tree in trees:
+		if len(tree.nodes) > 1:
+			valid_trees.append(tree)
+		else:
+			junk_nodes += tree.nodes
 	
+	log('valid trees: {0}, junk_nodes: {1}'.format(len(valid_trees), len(junk_nodes)))
+	
+	###### parse page cands
 	all_pages = []
-	for tree in all_trees:
-		all_pages += process_tree(tree)
-	print 'Pages:', len(all_pages)
+	for tree in valid_trees:
+		candids = [o.identifier for o in tree.nodes if o.is_root()]
+
+		for id in candids:
+			nodeids = [i for i in tree.expand_tree(id, filter = lambda x: x not in candids) if i not in candids]
+			if len(nodeids) > 0:
+				# little trick: do not cut the tree with only one node
+				new_page = MyPage()
+				new_page.add_obj(tree[id], True)
+				all_pages.append(new_page)
+				for node in nodeids:
+					new_page.add_obj(tree[node])
+				if utilities.search_url(new_page.root.url, valid_urls) is True:
+					new_page.isvalid = True
+				if tree[id].bpointer is not None:
+					new_page.ref = tree[tree[id].bpointer]
+
+	all_pages.sort(lambda x,y: cmp(x,y), lambda x: x.root.start_time, False)
+	log('Pages:%d' % len(all_pages))
 	
-	def gen_label(urls, url):
-		for i in urls:
-			if utilities.remove_url_prefix(url) == utilities.remove_url_prefix(i):
-				return 1
-		return -1
-	
+	junk2 = len(junk_nodes)
+	for node in junk_nodes:
+		found_flag = False
+		for page in all_pages[::-1]:
+			if cmp(page.root.start_time, node.start_time) < 0:
+				found_flag = True
+				break
+		if found_flag:
+			page.junk_objs.append(node)
+			junk2 -= 1
+
+	###### extract instances
+
 	all_instances = []
-	instances_pos = []
-	instances_neg = []
 	instance_pos_url = []
 	pos_cnt = 0
 	neg_cnt = 0	
 	for page in all_pages:
 		pf = PageFeature(page)
-		label = gen_label(valid_urls, page.root.url)
-		# Rewrite label
-		if len(page.objs) <= 1:
-			label = -1
-
-                if label == 1:
-                        instance_pos_url.append(page.root.url)
-                
-		instance = pf.assemble_instance(label)
-		if label == 1:
-			instances_pos.append(instance)
+		if page.isvalid:
+			log('{0} {1}'.format(page.root.url, len(page.objs)))
+			instance_pos_url.append(page.root.url)
+			label = 1
+			pos_cnt += 1
 		else:
-			instances_neg.append(instance)
-	all_instances = instances_pos + instances_neg
-	print 'positive#: ', len(instances_pos)
-	print 'negtive#: ', len(instances_neg)
-	##################################
-	log_instance = logfile+'.instance'
-	ofile = open(log_instance, 'wb')
-	ofile.write(''.join(all_instances))
-	ofile.close()
+			label = -1
+			neg_cnt += 1
+		instance = pf.assemble_instance(label)
+		all_instances.append(instance)
+	log('pos:{0}, neg:{1}'.format(pos_cnt, neg_cnt))
 
-	instance_page = log_instance+'.page'
-	ofile = open(instance_page, 'wb')
-	ofile.write('\n'.join(instance_pos_url))
-	ofile.close()
-	##################################
-	print 'writing instances to "%s.instance"' % logfile
+	return all_instances, instance_pos_url
+
+
 	
 def main():
+	global log_file
+	if os.path.exists(log_file):
+		os.remove(log_file)
+
 	parser = argparse.ArgumentParser(description='Extracting features as the input of LIBSVM from log. Output = logfile.instance')
 	parser.add_argument('logfile', type=str, help= 'log file containing the request/response pair')
 	parser.add_argument('urlfile', type=str, help= 'Groudtruth urls used to deduce labels of instances.')
 
 	args = parser.parse_args()
-	process_log(args.logfile, args.urlfile)
+	logfile = args.logfile
+	urlfile = args.urlfile
+	log_instance = logfile+'.instance'
+	instance_page = log_instance+'.page'
+
+	(instances, pageurls) = process_log(logfile, urlfile)
+
+	######  write to file
+	ofile = open(log_instance, 'wb')
+	ofile.write(''.join(instances))
+	ofile.flush()
+	ofile.close()
+
+	# ofile = open(instance_page, 'wb')
+	# ofile.write('\n'.join(pageurls))
+	# ofile.flush()
+	# ofile.close()
+
+	log('writing instances to "%s"' % log_instance)
+	#log('writing pages to "%s"' % instance_page)
 
 if __name__ == "__main__":
 	main()
