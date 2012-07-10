@@ -75,35 +75,35 @@ for i in range(len(FBFs)):
 
 ###### workflow
 
-for feature_set in features[0:1]:
-    for option in train_optioins[0:1]:
+for feature_set in features:
+    for option in train_optioins[3:4]:
         log('############################')
         test_id = testID()
         log(test_id)
         
         ###### select features
         feature_set_str = ','.join(feature_set)
-        cmd = 'select-feature.py -flist {0} "{1}" "{2}"'.format(feature_set_str, train_file_path, selected_train_file)
-        log(cmd)
+        cmd = 'python select-feature.py -flist {0} "{1}" "{2}"'.format(feature_set_str, train_file_path, selected_train_file)
+        #log(cmd)
         Popen(cmd, shell=True, stdout=PIPE).communicate()
 
-        cmd = 'select-feature.py -flist {0} "{1}" "{2}"'.format(feature_set_str, test_file_path, selected_test_file)
-        log(cmd)
+        cmd = 'python select-feature.py -flist {0} "{1}" "{2}"'.format(feature_set_str, test_file_path, selected_test_file)
+        #log(cmd)
         Popen(cmd, shell=True, stdout=PIPE).communicate()
 
         ###### easy processing
-        cmd = 'easy-cus.py {0} "{1}" "{2}"'.format(option, selected_train_file, selected_test_file)
+        cmd = 'python easy-cus.py {0} "{1}" "{2}"'.format(option, selected_train_file, selected_test_file)
         log(cmd)
         f = Popen(cmd, shell=True, stdout=PIPE).stdout
         for line in f:
             log(line.strip(' \r\n'))
             
         ###### statistics
-        cmd = '{0} "{1}" "{2}"'.format(statistics_py,scaled_test_file,predict_test_file)
+        cmd = 'python {0} "{1}" "{2}"'.format(statistics_py,scaled_test_file,predict_test_file)
         log(cmd)
         f = Popen(cmd, shell = True, stdout = PIPE).stdout
         for line in f:
-            log(line.strip(' \r\n'))
+			log(line.strip(' \r\n'))
 
         ###### logging
         if os.path.exists(model_file):

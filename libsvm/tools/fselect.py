@@ -132,7 +132,7 @@ def select(sample, feat_v):
 
 ### Do parameter searching (grid.py) 
 def train_svm(tr_file):
-	cmd = "%s %s" % (gridpy_exe,tr_file)
+	cmd = "python %s %s" % (gridpy_exe,tr_file)
 	print(cmd)
 	print('Cross validation...')
 	std_out = Popen(cmd, shell = True, stdout = PIPE).stdout
