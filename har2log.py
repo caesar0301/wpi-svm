@@ -1,7 +1,7 @@
 #-*- coding: utf-8 -*-
 # Author: chenxm
 import json, argparse, os, codecs, re, uuid
-import logbasic as basic
+import lib.logbasic as basic
 
 
 class RRPair(object):
@@ -57,18 +57,19 @@ def parse_field(dict, key):
 	return value
 
 
-	
 def process_har(readfile, ua_id):
-	log = json.load(codecs.open(readfile, 'rb', 'utf-8', 'replace'))['log']
+	print readfile
+	log = json.load(codecs.open(readfile, 'rb', 'utf-8'))['log']
 	entries = log['entries']
 	objects = []
 
+	this_ua = None
 	for har_ent in entries:
 		rr = RRPair()
 		# Parsing
 		rr.sdt = parse_time(har_ent['startedDateTime'])
 		rr.flowid = None
-		rr.srcip = '219.228.106.207'
+		rr.srcip = '0.0.0.0'	# tmp
 		rr.srcport = None
 		rr.destip = parse_field(har_ent, 'serverIPAddress')
 		rr.destport = parse_field(har_ent, 'connection')
@@ -89,7 +90,8 @@ def process_har(readfile, ua_id):
 					if field['name'] == 'Host':
 						rr.host = field['value']
 					if field['name'] == 'User-Agent':
-						ua = field['value']
+						if this_ua == None:
+							this_ua = field['value']
 		if response is not None:
 			rr.status = parse_field(response, 'status')
 			rr.response_version = parse_field(response, 'httpVersion')
@@ -106,11 +108,11 @@ def process_har(readfile, ua_id):
 			rr.wait = parse_field(timings, 'wait')
 			rr.receive = parse_field(timings, 'receive')
 		# user agent id
-		if ua not in ua_id:
-			ua_id[ua] = uuid.uuid4().hex
-			rr.uaid = ua_id[ua]
+		if this_ua not in ua_id:
+			ua_id[this_ua] = uuid.uuid4().hex
+			rr.uaid = ua_id[this_ua]
 		else:
-			rr.uaid = ua_id[ua]
+			rr.uaid = ua_id[this_ua]
 
 		objects.append(rr)
 
@@ -121,9 +123,12 @@ def main():
 	parser = argparse.ArgumentParser(description='Dumping har files to web log format')
 	parser.add_argument('-f', '--input', type=str, help= 'a single HAR file as input')
 	parser.add_argument('-d', '--dir', type=str, help= 'file folder containing HAR file(s). All the HAR files under this folder will be processed.')
+	parser.add_argument('output', type=str, help= 'Output file')
 	args = parser.parse_args()
 	input_file = args.input
 	input_folder = args.dir
+	dumpfile = args.output
+	uafile = dumpfile+'.ua'
 
 	if input_file is None and input_folder is None:
 		parser.print_help()
@@ -134,24 +139,10 @@ def main():
 
 		print 'processing hars...'
 		if input_file is not None:
-			dumpfile  = input_file+'.log'
-			uafile = dumpfile+'.ua'
-			if os.path.exists(dumpfile):
-				os.remove(dumpfile)
-			if os.path.exists(uafile):
-				os.remove(uafile)
-
 			all_objects += process_har(input_file, ua_id_d)
 
 		elif input_folder is not None:
 			foldername = os.path.split(input_folder.rstrip('/\\'))[1]
-			dumpfile  = foldername+'.log'
-			uafile = dumpfile+'.ua'
-			if os.path.exists(dumpfile):
-				os.remove(dumpfile)
-			if os.path.exists(uafile):
-				os.remove(uafile)
-
 			# Processing all HAR file under the folder
 			for root, dirs, files in os.walk(input_folder):
 				for file in files:
@@ -164,11 +155,14 @@ def main():
 		# Dumping useragents
 		outfile = open(uafile, 'wb')
 		lines = []
+		print ua_id_d
 		for item in ua_id_d.items():
-			lines.append(item[1]+'\t\t'+item[0])
+			lines.append(str(item[1])+'\t'+str(item[0]))
 		outfile.write('\n'.join(lines))
 		outfile.flush()
 		outfile.close()
+
+		print 'writing useragent to file "%s"' % uafile
 
 		# Dumping rrpair
 		for rr in all_objects:
@@ -199,7 +193,6 @@ def main():
 				response_body_size = rr.response_body_size,
 				response_content_type = rr.type)
 			
-		print 'writing useragent to file "%s"' % uafile
 		print 'writing log to file "%s"' % dumpfile
 
 			

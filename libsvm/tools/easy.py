@@ -18,12 +18,12 @@ if not is_win32:
 	grid_py = "./grid.py"
 	gnuplot_exe = "/usr/local/bin/gnuplot"
 else:
-        # example for windows
-	svmscale_exe = r"..\windows\svm-scale.exe"
-	svmtrain_exe = r"..\windows\svm-train.exe"
-	svmpredict_exe = r"..\windows\svm-predict.exe"
+    # example for windows
+	svmscale_exe = r"..\\windows\\svm-scale.exe"
+	svmtrain_exe = r"..\\windows\\svm-train.exe"
+	svmpredict_exe = r"..\\windows\\svm-predict.exe"
 	gnuplot_exe = r"C:\Program Files (x86)\gnuplot\bin\pgnuplot.exe"
-	grid_py = r".\grid.py"
+	grid_py = r".\\grid.py"
 
 assert os.path.exists(svmscale_exe),"svm-scale executable not found"
 assert os.path.exists(svmtrain_exe),"svm-train executable not found"
