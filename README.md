@@ -14,11 +14,11 @@ This module must be put into `lib` folder to be quoted correctly.
 Main Programs
 ---------------
 
-FGen_log.py: generate features from logs
+`FGen_log.py`: generate features from logs
 
-FGen_har.py: generate features from [HAR](http://www.softwareishard.com/blog/har-12-spec/) files
+`FGen_har.py`: generate features from [HAR](http://www.softwareishard.com/blog/har-12-spec/) files
 
-har2log.py: convert HAR files into HTTP logs with format below
+`har2log.py`: convert HAR files into HTTP logs with format below
 
 HTTP Logs
 --------------
