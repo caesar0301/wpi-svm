@@ -6,23 +6,24 @@ A tool to generate features (as input to `libsvm`) to identify web page from net
 Dependencies
 ---------------
 
-pyTree: python module implementing tree data structure.
+[pyTree] (https://github.com/caesar0301/pyTree): python module implementing tree data structure. 
+This module must be put into `lib` folder to be quoted correctly.
 
-libsvm
+[libsvm](http://www.csie.ntu.edu.tw/~cjlin/libsvm/): A Library for Support Vector Machines
 
 Main Programs
 ---------------
 
 FGen_log.py: generate features from logs
 
-FGen_har.py: generate features from har files
+FGen_har.py: generate features from [HAR](http://www.softwareishard.com/blog/har-12-spec/) files
 
 har2log.py: convert HAR files into HTTP logs with format below
 
 HTTP Logs
 --------------
 
-* Log file is generate by another project `http-sniffer`, which sniffers raw network traffic (trace files) and extracts HTTP logs.
+* Log file is generate by another project [http-sniffer](https://github.com/caesar0301/http-sniffer), which sniffers raw network traffic (trace files) and extracts HTTP logs.
 
 * If there isn't raw network trace on hand and only HAR format files (exported by like firebug), you can convert these HAR files into logs using `har2log.py`; but this method is just for validation. We also provide a tool `FGen_har.py` to generate features directly from HAR files without convertion.
 
